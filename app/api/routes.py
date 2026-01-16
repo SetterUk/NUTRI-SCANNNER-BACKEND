@@ -39,14 +39,20 @@ async def scan_product(
         ingredients=ingredients_list,
         user_profile=user_profile
     )
+
     new_product = Product(
         barcode=barcode,
         name=raw_data["name"],
         brand=raw_data["brand"],
         image_url=raw_data["image_url"],
+        quantity=raw_data.get("quantity"),
         ingredients=ingredients_list,
+        ingredients_text=raw_data.get("ingredients_text", ""),
+        nutrients=raw_data.get("nutrients", {}),
+        nova_group=raw_data.get("nova_group"),
+        nova_tags=raw_data.get("nova_tags", []),
         nutri_score=raw_data["nutri_score"],
-        category_tag=raw_data["category_tag"],
+        Category_tag=raw_data["category_tag"],
         verdict=ai_result.get("verdict", "PASS"),
         roast_or_toast=ai_result.get("roast_or_toast", "AI Analysis Failed"),
         reasoning=ai_result.get("reasoning", "Check ingredients manually.")

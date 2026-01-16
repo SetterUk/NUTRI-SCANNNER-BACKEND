@@ -17,10 +17,14 @@ async def get_product_from_api(barcode: str) -> Optional[Dict[str, Any]]:
                 "name": product.get("product_name", "Unknown Product"),
                 "brand": product.get("brands", "Unknown Brand"),
                 "image_url": product.get("image_url", None),
+                "quantity": product.get("quantity", ""),
                 "ingredients_text": product.get("ingredients_text", ""),
                 "ingredients_tags": product.get("ingredients_original_tags", []),
                 "nutri_score": product.get("nutriscore_grade", "unknown"),
-                "category_tag": product.get("categories_tags", ["unknown"])[0] if product.get("categories_tags") else None
+                "nova_group": product.get("nova_group"),
+                "nova_tags": product.get("nova_groups_tags", []),
+                "category_tag": product.get("categories_tags", ["unknown"])[0] if product.get("categories_tags") else None,
+                "nutrients": product.get("nutriments", {})
             }
         except Exception as e:
             print(f"Error fetching from OFF: {e}")

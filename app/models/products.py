@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from sqlmodel import SQLModel, Field, JSON
 from datetime import datetime
 
@@ -10,6 +10,11 @@ class Product(SQLModel, table=True):
     image_url: Optional[str] = None
 
     ingredients: List[str] = Field(sa_type=JSON)
+    ingredients_text: Optional[str] = None
+    nutrients: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)
+    quantity: Optional[str] = None
+    nova_group: Optional[int] = None
+    nova_tags: Optional[List[str]] = Field(default=None, sa_type=JSON)
     nutri_score: Optional[str] = None
     Category_tag: Optional[str] = None
 
