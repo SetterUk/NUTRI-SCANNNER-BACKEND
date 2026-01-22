@@ -16,12 +16,21 @@ class Product(SQLModel, table=True):
     nova_group: Optional[int] = None
     nova_tags: Optional[List[str]] = Field(default=None, sa_type=JSON)
     nutri_score: Optional[str] = None
-    Category_tag: Optional[str] = None
+    categories: Optional[str] = None
 
     verdict: str
     roast_or_toast: str
     reasoning: str
 
     scan_count: int = Field(default=1)
+    
+    countries: Optional[str] = None
+    allergens: Optional[str] = None
+    additives_tags: Optional[List[str]] = Field(default=None, sa_type=JSON)
+    serving_size: Optional[str] = None
+    ecoscore_grade: Optional[str] = None
+    nutrient_levels: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)
+    packaging: Optional[str] = None
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

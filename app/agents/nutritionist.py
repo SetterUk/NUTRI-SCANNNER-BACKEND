@@ -2,7 +2,7 @@ import google.generativeai as genai
 import json
 import os
 from app.core.config import settings
-
+from app.models.schemas import AIAnalysisresult
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
 async def analyze_product(product_name: str, ingredients: list, user_profile: str = "general health"):
@@ -30,12 +30,13 @@ async def analyze_product(product_name: str, ingredients: list, user_profile: st
             prompt,
             generation_config={"response_mime_type": "application/json"}
         )
-        return json.loads(response.text)
+        return AIAnalysisresult.model_validate_json(response.text)
+    
     
     except Exception as e:
         print(f"AI Analysis Failed: {e}")
-        return {
-            "verdict": "PASS", 
-            "roast_or_toast": "I'm having a brain freeze, but this looks suspicious.", 
-            "reasoning": "AI Service unavailable."
-        }
+        return AIAnalysisresult(
+            verdict = "PASS", 
+            roast_or_toast =  "I'm having a brain freeze, but this looks suspicious.", 
+            reasoning = "AI Service unavailable."
+        )
