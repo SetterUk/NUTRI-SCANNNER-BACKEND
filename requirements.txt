@@ -6,3 +6,6 @@ pydantic-settings==2.1.0
 httpx==0.26.0
 google-generativeai==0.3.2
 python-dotenv==1.0.0
+langgraph
+langchain-google-genai
+langchain-core
