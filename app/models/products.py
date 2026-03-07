@@ -19,8 +19,9 @@ class Product(SQLModel, table=True):
     categories: Optional[str] = None
 
     verdict: str
-    roast_or_toast: str
-    reasoning: str
+    health_score: int
+    summary: str
+    ingredients_analysis: List[Dict[str, Any]] = Field(default=[], sa_type=JSON)
 
     scan_count: int = Field(default=1)
     

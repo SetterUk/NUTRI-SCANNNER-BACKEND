@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: nutri-scanner-api
+    env: docker
+    region: ohio
+    plan: free
+    branch: main
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

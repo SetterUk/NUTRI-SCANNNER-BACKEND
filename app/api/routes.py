@@ -14,7 +14,6 @@ router = APIRouter()
 @router.post("/scan/{barcode}", response_model=ProductResponse)
 async def scan_product(
     barcode: str,
-    user_profile: str = "General Health",
     session: AsyncSession = Depends(get_session)
 ):
     statement = select(Product).where(Product.barcode == barcode)
@@ -43,12 +42,10 @@ async def scan_product(
         "barcode": barcode,
         "product_name": raw_data.get("name", "Unknown"),
         "ingredients": ingredients_list,
-        "user_profile": user_profile,
+        "ingredients_text": raw_data.get("ingredients_text", ""),
         "category_tag": raw_data.get("categories", ""), 
-        "is_food": False,
-        "ai_analysis": None,
-        "red_flag_triggered": False,
-        "banned_ingredients_found": [],
+        "is_food": True,
+        "analysis_result": None,
         "final_response": {}
     }
 
@@ -59,8 +56,9 @@ async def scan_product(
         print(f"⚠️ Agent Workflow Failed: {e}")
         agent_output = {
             "verdict": "PASS",
-            "roast_or_toast": "Our AI factory is on a coffee break. Better safe than sorry.",
-            "reasoning": "System timeout or agentic error."
+            "health_score": 0,
+            "summary": "Our AI factory is on a coffee break. Better safe than sorry.",
+            "ingredients_analysis": []
         }
 
     # --- 4. SAVE TO DB ---
@@ -87,8 +85,9 @@ async def scan_product(
         packaging=raw_data.get("packaging"),
         
         verdict=agent_output.get("verdict", "PASS"),
-        roast_or_toast=agent_output.get("roast_or_toast", "Analysis failed."),
-        reasoning=agent_output.get("reasoning", "Unknown error.")
+        health_score=agent_output.get("health_score", 0),
+        summary=agent_output.get("summary", "Analysis failed."),
+        ingredients_analysis=agent_output.get("ingredients_analysis", [])
     )
 
     session.add(new_product)
