@@ -4,8 +4,6 @@ sqlmodel
 psycopg[binary]
 pydantic-settings
 httpx
-google-genai
 python-dotenv
 langgraph
-langchain-google-genai
-langchain-core
+groq
