@@ -14,8 +14,8 @@ class IngredientAnalysis(BaseModel):
     reason: str
 
 class NutritionAnalysis(BaseModel):
-    energy_estimation: str = Field(description="Explanation of how much energy the user will get after eating this, based on kcal and macros.")
-    macronutrient_balance: str = Field(description="Summary of the carbs, proteins, and fats balance.")
+    energy_estimation: str = Field(default="", description="Explanation of how much energy the user will get after eating this, based on kcal and macros.")
+    macronutrient_balance: str = Field(default="", description="Summary of the carbs, proteins, and fats balance.")
 
 class AIAnalysisResult(BaseModel):
     verdict: str = Field(description="SMASH OR PASS")
@@ -61,17 +61,17 @@ class ProductResponse(AIAnalysisResult):
     quantity: Optional[str] = None
     
     ingredients_text: Optional[str] = None
-    ingredients: List[str] = []
+    ingredients: Optional[List[str]] = Field(default_factory=list)
     nutrients: Optional[dict] = None
     nutri_score: Optional[str] = None
     
     nova_group: Optional[int] = None
-    nova_tags: List[str] = []
+    nova_tags: Optional[List[str]] = Field(default_factory=list)
     categories: Optional[str] = None
     
     countries: Optional[str] = None
     allergens: Optional[str] = None
-    additives_tags: List[str] = []
+    additives_tags: Optional[List[str]] = Field(default_factory=list)
     serving_size: Optional[str] = None
     ecoscore_grade: Optional[str] = None
     nutrient_levels: Optional[dict] = None
