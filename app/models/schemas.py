@@ -13,11 +13,20 @@ class IngredientAnalysis(BaseModel):
     status: IngredientStatus
     reason: str
 
+class NutritionAnalysis(BaseModel):
+    energy_estimation: str = Field(description="Explanation of how much energy the user will get after eating this, based on kcal and macros.")
+    macronutrient_balance: str = Field(description="Summary of the carbs, proteins, and fats balance.")
+
 class AIAnalysisResult(BaseModel):
     verdict: str = Field(description="SMASH OR PASS")
+    is_good_for_health: bool = Field(description="True if generally healthy to consume, False otherwise.")
+    health_reason: str = Field(description="Short sentence explaining why it is good or bad.")
+    health_scale: float = Field(ge=1.0, le=10.0, description="1 to 10 scale, where 10 is excellent and 1 is terrible.")
+    safe_consumption_frequency: str = Field(description="How often this can safely be consumed (e.g., 'Daily', 'Twice a week').")
     health_score: int = Field(ge=0, le=100)
     summary: str
     ingredients_analysis: List[IngredientAnalysis]
+    nutrition_analysis: NutritionAnalysis
 
     @field_validator('verdict')
     @classmethod

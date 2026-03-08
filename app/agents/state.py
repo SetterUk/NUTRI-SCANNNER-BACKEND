@@ -11,4 +11,5 @@ class AgentState(TypedDict):
     # Keeping extra fields from previous routes for compatibility
     barcode: str
     ingredients: List[str]
+    nutrients: Dict[str, Any]
     category_tag: str

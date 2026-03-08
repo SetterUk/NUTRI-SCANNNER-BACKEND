@@ -19,9 +19,14 @@ class Product(SQLModel, table=True):
     categories: Optional[str] = None
 
     verdict: str
+    is_good_for_health: bool
+    health_reason: str
+    health_scale: float
+    safe_consumption_frequency: str
     health_score: int
     summary: str
     ingredients_analysis: List[Dict[str, Any]] = Field(default=[], sa_type=JSON)
+    nutrition_analysis: Dict[str, Any] = Field(default={}, sa_type=JSON)
 
     scan_count: int = Field(default=1)
     

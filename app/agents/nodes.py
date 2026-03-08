@@ -54,7 +54,9 @@ async def nutritionist_agent(state: AgentState) -> Dict[str, Any]:
     logger.info("Nutritionist Agent starting deep analysis via LLM.")
     result = await analyze_product_detailed(
         product_name=state.get("product_name", "Unknown"),
-        ingredients_text=state.get("ingredients_text", "")
+        ingredients_text=state.get("ingredients_text", ""),
+        ingredients_list=state.get("ingredients", []),
+        nutrients=state.get("nutrients", {})
     )
     return {"analysis_result": result}
 
@@ -73,9 +75,17 @@ async def response_synthesizer(state: AgentState) -> Dict[str, Any]:
         return {
             "final_response": {
                 "verdict": "PASS",
+                "is_good_for_health": False,
+                "health_reason": "Not a food product",
+                "health_scale": 1.0,
+                "safe_consumption_frequency": "Never",
                 "health_score": 0,
                 "summary": "Item identified as non-food.",
-                "ingredients_analysis": []
+                "ingredients_analysis": [],
+                "nutrition_analysis": {
+                    "energy_estimation": "Not applicable",
+                    "macronutrient_balance": "Not applicable"
+                }
             }
         }
         
@@ -86,8 +96,16 @@ async def response_synthesizer(state: AgentState) -> Dict[str, Any]:
         return {
             "final_response": {
                 "verdict": "PASS",
+                "is_good_for_health": False,
+                "health_reason": "AI Analysis Unavailable",
+                "health_scale": 1.0,
+                "safe_consumption_frequency": "Unknown",
                 "health_score": 0,
                 "summary": "AI Analysis Unavailable",
-                "ingredients_analysis": []
+                "ingredients_analysis": [],
+                "nutrition_analysis": {
+                    "energy_estimation": "Unavailable",
+                    "macronutrient_balance": "Unavailable"
+                }
             }
         }
