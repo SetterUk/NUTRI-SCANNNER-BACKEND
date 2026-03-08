@@ -86,7 +86,7 @@ async def scan_product(
         
         verdict=agent_output.get("verdict", "PASS"),
         is_good_for_health=agent_output.get("is_good_for_health", False),
-        health_reason=agent_output.get("health_reason", "Analysis Unavailable"),
+        health_reason=agent_output.get("health_reason", "Analysis failed."),
         health_scale=agent_output.get("health_scale", 1.0),
         safe_consumption_frequency=agent_output.get("safe_consumption_frequency", "Unknown"),
         health_score=agent_output.get("health_score", 0),
