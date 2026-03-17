@@ -7,13 +7,14 @@ logger = logging.getLogger(__name__)
 
 async def intent_agent(state: AgentState) -> Dict[str, Any]:
     """
-    AGENT: Intent Classifier & Safety Guardrail
-    DESCRIPTION: Scans the incoming product name to determine if the item is an edible food product. 
-    It prevents the downstream Nutritionist AI from attempting to analyze hazardous non-food items like 
-    detergents, batteries, or cosmetics as if they were food. 
-    
-    Returns:
-        Dict: Updates the `is_food` state variable. True if edible, False if hazardous/non-food.
+    AGENT: Intent Classification & Hazard Filter
+    FUNCTION: Performs a heuristic analysis on the 'product_name' string to validate if the item
+    belongs to the 'Human Consumables' domain. It acts as a primary safety gate to prevent
+    the downstream LLM agents from attempting to process hazardous non-food items (e.g., toxins, 
+    cosmetics, electronic hardware) as edible products.
+
+    Update:
+        - is_food (bool): Set to False if non-food keywords are detected.
     """
     logger.info(f"Intent Agent analyzing product: {state.get('product_name')}")
     non_food_keywords = ["detergent", "shampoo", "battery", "soap", "bleach", "cleaner", "lotion", "cream"]
@@ -30,11 +31,11 @@ async def intent_agent(state: AgentState) -> Dict[str, Any]:
 def orchestrator_node(state: AgentState) -> str:
     """
     AGENT: Workflow Orchestrator (Router)
-    DESCRIPTION: Acts as the state machine's decision engine. It inspects the `is_food` Boolean produced 
-    by the Intent Agent and routes the execution flow accordingly. 
+    FUNCTION: Evaluates the current Graph State (specifically the 'is_food' boolean) to determine
+     the optimal execution path. It implements a conditional branching logic:
     
-    Returns:
-        str: The name of the next node to execute ("nutritionist_agent" or "response_synthesizer").
+    Path A (is_food=True): Route to 'nutritionist_agent' for deep physiological analysis.
+    Path B (is_food=False): Route directly to 'response_synthesizer' to generate a safety rejection payload.
     """
     logger.info(f"Orchestrator Node routing. is_food={state.get('is_food')}")
     if state.get("is_food", True):
@@ -43,13 +44,14 @@ def orchestrator_node(state: AgentState) -> str:
 
 async def nutritionist_agent(state: AgentState) -> Dict[str, Any]:
     """
-    AGENT: Clinical Nutritionist AI
-    DESCRIPTION: The core intelligence of the application. It takes the raw ingredient text and the 
-    product name, then invokes a large language model (Gemini 1.5 Flash) heavily prompted as a 
-    Clinical Data Analyst. It performs a deep physiological analysis on the ingredients.
-    
-    Returns:
-        Dict: Updates the `analysis_result` state variable with a strictly typed AIAnalysisResult object.
+    AGENT: Clinical Nutritional Analyst (LLM-Driven)
+    FUNCTION: Ingests the multi-modal product data (Raw Text, Structured Ingredients, and
+    Numerical Nutritional Facts) and invokes a high-parameter Language Model (Llama-3.3-70b).
+    It cross-references ingredient lists with quantitative macronutrient/micronutrient data 
+    to calculate a granular Health Score and determine metabolic impact.
+
+    Update:
+        - analysis_result (AIAnalysisResult): Structured Pydantic object containing clinical insights.
     """
     logger.info("Nutritionist Agent starting deep analysis via LLM.")
     result = await analyze_product_detailed(
@@ -62,13 +64,11 @@ async def nutritionist_agent(state: AgentState) -> Dict[str, Any]:
 
 async def response_synthesizer(state: AgentState) -> Dict[str, Any]:
     """
-    AGENT: Final Response Synthesizer
-    DESCRIPTION: Aggregates the data produced throughout the Graph's lifecycle into the final, 
-    Android-ready JSON payload. It handles edge cases, such as fast-failing non-food items, and 
-    maps the AI's internal state structures into the clean dictionary required by the API route.
-    
-    Returns:
-        Dict: Populates the `final_response` state variable.
+    AGENT: Response Serialization & Format Unifier
+    FUNCTION: Aggregates the computed attributes from all preceding agents into a final, 
+    type-safe API response. It handles logical fallbacks (AI downtime or non-food rejection)
+    and ensures the 'final_response' state variable conforms to the 'ProductResponse'
+    Pydantic schema required by the mobile frontend.
     """
     logger.info("Response Synthesizer compiling final payload.")
     if not state.get("is_food", True):
