@@ -2,9 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
-from app.models.products import Product
+from app.models.products import Product, UserAddedProduct
 from app.services.openfoodfacts import get_product_from_api
-from app.models.schemas import ProductResponse
+from app.models.schemas import ProductResponse, ReportMissingRequest
 
 # --- 1. IMPORT THE LANGGRAPH WORKFLOW ---
 from app.agents.workflow import nutrition_app_workflow
@@ -16,6 +16,7 @@ async def scan_product(
     barcode: str,
     session: AsyncSession = Depends(get_session)
 ):
+    # 1. CHECK CACHE
     statement = select(Product).where(Product.barcode == barcode)
     result = await session.execute(statement)
     cached_product = result.scalars().first()
@@ -100,3 +101,21 @@ async def scan_product(
     await session.refresh(new_product)
 
     return new_product
+
+@router.post("/report-missing")
+async def report_missing_product(
+    data: ReportMissingRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Log a product that was not found in the external database.
+    Saves ONLY to UserAddedProduct table.
+    """
+    new_log = UserAddedProduct(
+        name=data.name,
+        quantity=data.quantity,
+        barcode=data.barcode
+    )
+    session.add(new_log)
+    await session.commit()
+    return {"status": "success", "message": "Product reported successfully"}

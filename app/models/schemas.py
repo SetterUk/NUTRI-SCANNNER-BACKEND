@@ -34,6 +34,11 @@ class AIAnalysisResult(BaseModel):
         clean = v.strip().upper().replace("!", "").replace(".", "")
         return clean if clean in ["SMASH", "PASS"] else "PASS"
 
+class ReportMissingRequest(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[str] = None
+    barcode: Optional[str] = None
+
 class AlternativeProduct(BaseModel):
     name: str = Field(alias="product_name", default="Unknown Product")
     brand: str = Field(alias="brands", default="generic")
