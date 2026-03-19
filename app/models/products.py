@@ -40,3 +40,14 @@ class Product(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class UserAddedProduct(SQLModel, table=True):
+    """
+    Table for tracking products that were not found in Open Food Facts.
+    All fields are optional as per requirements.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: Optional[str] = None
+    quantity: Optional[str] = None
+    barcode: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
