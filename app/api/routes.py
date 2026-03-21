@@ -44,10 +44,18 @@ async def scan_product(
         "product_name": raw_data.get("name", "Unknown"),
         "ingredients": ingredients_list,
         "ingredients_text": raw_data.get("ingredients_text", ""),
-        "category_tag": raw_data.get("categories", ""), 
+        "category_tag": raw_data.get("categories", ""),
         "is_food": True,
         "analysis_result": None,
-        "final_response": {}
+        "final_response": {},
+        # Scoring engine inputs
+        "nova_group": raw_data.get("nova_group"),
+        "nutri_score": raw_data.get("nutri_score"),
+        "additives_tags": raw_data.get("additives_tags") or [],
+        "nutrient_levels": raw_data.get("nutrient_levels") or {},
+        "serving_size": raw_data.get("serving_size"),
+        "nutrients": raw_data.get("nutrients") or {},
+        "scoring_result": None,
     }
 
     try:
