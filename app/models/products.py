@@ -18,16 +18,19 @@ class Product(SQLModel, table=True):
     nutri_score: Optional[str] = None
     categories: Optional[str] = None
 
-    verdict: str
-    is_good_for_health: bool
-    health_reason: str
-    health_scale: float
-    safe_consumption_frequency: str
-    health_score: int
-    summary: str
+    # AI Analysis Fields (Now Optional for Per-User Result)
+    verdict: Optional[str] = None
+    is_good_for_health: Optional[bool] = None
+    health_reason: Optional[str] = None
+    health_scale: Optional[float] = None
+    safe_consumption_frequency: Optional[str] = None
+    health_score: Optional[int] = None
+    summary: Optional[str] = None
     ingredients_analysis: List[Dict[str, Any]] = Field(default=[], sa_type=JSON)
     nutrition_analysis: Dict[str, Any] = Field(default={}, sa_type=JSON)
 
+    # Metadata
+    source: str = Field(default="OFF") # "OFF" or "MANUAL"
     scan_count: int = Field(default=1)
     
     countries: Optional[str] = None
