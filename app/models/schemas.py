@@ -39,6 +39,13 @@ class ReportMissingRequest(BaseModel):
     quantity: Optional[str] = None
     barcode: Optional[str] = None
 
+class ManualProductRequest(BaseModel):
+    barcode: str
+    name: str
+    ingredients_text: str
+    brand: Optional[str] = None
+    quantity: Optional[str] = None
+
 class AlternativeProduct(BaseModel):
     name: str = Field(alias="product_name", default="Unknown Product")
     brand: str = Field(alias="brands", default="generic")
@@ -90,3 +97,51 @@ class ProductResponse(AIAnalysisResult):
     def verdict_color(self) -> str:
         """Red for Pass, Green for smash"""
         return "#FF0000" if self.verdict == "PASS" else "#008000"
+
+# --- USER & PROFILE SCHEMAS ---
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    full_name: Optional[str] = None
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class ProfileUpdate(BaseModel):
+    age: Optional[int] = None
+    weight_kg: Optional[float] = None
+    height: Optional[float] = None
+    gender: Optional[str] = None
+    activity_level: Optional[str] = None
+    dietary_preferences: Optional[str] = None
+    health_goals: Optional[str] = None
+    allergies: Optional[List[str]] = None
+    health_tags: Optional[List[str]] = None
+
+class UserProfileResponse(BaseModel):
+    age: Optional[int] = None
+    weight_kg: Optional[float] = None
+    height: Optional[float] = None
+    gender: Optional[str] = None
+    activity_level: Optional[str] = None
+    dietary_preferences: Optional[str] = None
+    health_goals: Optional[str] = None
+    allergies: List[str] = []
+    health_tags: List[str] = []
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: Optional[str] = None
+    profile: Optional[UserProfileResponse] = None
+
+    model_config = {"from_attributes": True}
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    user_id: Optional[str] = None
