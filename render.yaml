@@ -4,9 +4,15 @@ services:
     env: docker
     region: ohio
     plan: free
-    branch: main
+    branch: purva-main
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
         sync: false
