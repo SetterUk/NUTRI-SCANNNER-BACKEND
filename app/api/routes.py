@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,7 +6,7 @@ from app.core.database import get_session
 from app.models.products import Product, UserAddedProduct
 from app.services.openfoodfacts import get_product_from_api
 from app.models.schemas import ProductResponse, ReportMissingRequest, ManualProductRequest, UserRegister, UserLogin
-from app.api.deps import create_access_token, get_current_user, get_password_hash, verify_password
+from app.api.deps import create_access_token, get_current_user, get_password_hash, verify_password, get_current_user_optional
 from app.models.users import User, UserProfile
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -119,12 +120,14 @@ async def google_auth(data: TokenData, session: AsyncSession = Depends(get_sessi
 async def scan_product(
     barcode: str,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    # Fetch user profile for personalization
-    profile_stmt = select(UserProfile).where(UserProfile.user_id == current_user.id)
-    profile_result = await session.execute(profile_stmt)
-    profile = profile_result.scalars().first()
+    # Fetch user profile for personalization if user is authenticated
+    profile = None
+    if current_user:
+        profile_stmt = select(UserProfile).where(UserProfile.user_id == current_user.id)
+        profile_result = await session.execute(profile_stmt)
+        profile = profile_result.scalars().first()
 
     # 1. CHECK CACHE FOR BASE PRODUCT DATA
     statement = select(Product).where(Product.barcode == barcode)

@@ -73,3 +73,30 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
         )
+
+security_optional = HTTPBearer(auto_error=False)
+
+async def get_current_user_optional(
+    session: AsyncSession = Depends(get_session),
+    token: Optional[HTTPAuthorizationCredentials] = Depends(security_optional)
+) -> Optional[User]:
+    if not token or not token.credentials:
+        return None
+    try:
+        payload = jwt.decode(
+            token.credentials,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            return None
+        
+        user_id = int(user_id_str)
+        statement = select(User).where(User.id == user_id)
+        result = await session.execute(statement)
+        user = result.scalars().first()
+        return user
+    except Exception:
+        return None
+
