@@ -144,6 +144,7 @@ async def nutritionist_agent(state: AgentState) -> Dict[str, Any]:
         ingredients_text=state.get("ingredients_text", ""),
         categories=state.get("category_tag"),
         serving_size=state.get("serving_size"),
+        product_name=state.get("product_name"),
     )
 
     logger.info(

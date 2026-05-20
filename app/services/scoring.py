@@ -58,7 +58,8 @@ _CATEGORY_KEYWORDS = {
     "protein_foods": ["meat", "beef", "chicken", "pork", "poultry", "fish",
                       "seafood", "salmon", "tuna", "egg", "tofu", "tempeh"],
     "whole_foods":   ["fruit", "vegetable", "legume", "bean", "lentil",
-                      "nut", "seed", "grain", "oat", "quinoa", "rice", "pulse"],
+                      "nut", "peanut", "cashew", "almond", "pistachio", "walnut", 
+                      "seed", "grain", "oat", "quinoa", "rice", "pulse", "plant-based"],
     "condiments":    ["sauce", "condiment", "dressing", "ketchup", "mustard",
                       "vinegar", "spice", "seasoning", "pickle", "relish",
                       "mayo", "mayonnaise", "hot-sauce"],
@@ -76,6 +77,14 @@ def detect_category_group(categories: Optional[str]) -> str:
     if not categories:
         return "general"
     cat = categories.lower()
+    
+    # Specific fix: "plant-based-foods-and-beverages" is a very common top-level category on OFF
+    # representing solid whole foods, nuts, etc. Strip it or replace it to prevent false positive beverage match.
+    if "plant-based-foods-and-beverages" in cat:
+        cat = cat.replace("plant-based-foods-and-beverages", "plant-based-foods")
+    if "plant-based foods and beverages" in cat:
+        cat = cat.replace("plant-based foods and beverages", "plant-based foods")
+        
     for group, keywords in _CATEGORY_KEYWORDS.items():
         if any(k in cat for k in keywords):
             return group
@@ -84,7 +93,7 @@ def detect_category_group(categories: Optional[str]) -> str:
 
 # ---------------------------------------------------------------------------
 # Category-specific sugar/salt/sat-fat floors (g per 100g)
-# Above 1× floor → -3, 3× → -6, 6× → -9, 9× → -12
+# Above 1× floor, penalty scales continuously up to maximum cap.
 # ---------------------------------------------------------------------------
 
 _THRESHOLDS = {
@@ -101,48 +110,133 @@ _THRESHOLDS = {
     "general":     (5.0,  0.75,  2.0,   0.5,  500),
 }
 
-def _sugar_deduction(value: float, floor: float) -> int:
-    if value > floor * 9:  return -12
-    if value > floor * 6:  return -9
-    if value > floor * 3:  return -6
-    if value > floor * 1:  return -3
-    return 0
+def _sugar_deduction(value: float, floor: float) -> float:
+    if value <= floor:
+        return 0.0
+    ratio = value / floor
+    if ratio >= 9.0:
+        return -12.0
+    # Smooth continuous linear interpolation between 1.0 (-3) and 9.0 (-12)
+    return -3.0 - (ratio - 1.0) * 1.125
 
-def _salt_deduction(value: float, floor: float) -> int:
-    if value > floor * 3.3:  return -6
-    if value > floor * 2:    return -4
-    if value > floor:        return -2
-    return 0
+def _salt_deduction(value: float, floor: float) -> float:
+    if value <= floor:
+        return 0.0
+    ratio = value / floor
+    if ratio >= 3.3:
+        return -6.0
+    # Smooth continuous linear interpolation between 1.0 (-2) and 3.3 (-6)
+    return -2.0 - (ratio - 1.0) * 1.73913
 
-def _sat_fat_deduction(value: float, floor: float, is_protein_food: bool) -> int:
-    raw = 0
-    if value > floor * 7.5:  raw = -8
-    elif value > floor * 5:  raw = -6
-    elif value > floor * 2.5:raw = -4
-    elif value > floor:      raw = -2
+def _sat_fat_deduction(value: float, floor: float, is_protein_food: bool) -> float:
+    if value <= floor:
+        return 0.0
+    ratio = value / floor
+    if ratio >= 7.5:
+        raw = -8.0
+    else:
+        # Smooth continuous linear interpolation between 1.0 (-2) and 7.5 (-8)
+        raw = -2.0 - (ratio - 1.0) * 0.92307
     if is_protein_food:
-        raw = int(raw * 0.6)  # natural meat fat is less harmful
+        raw = raw * 0.6  # natural meat fat is less harmful
     return raw
 
-def _trans_fat_deduction(value: float, floor: float) -> int:
-    if value > floor * 4:  return -8
-    if value > floor * 2:  return -5
-    if value > floor:      return -2
-    return 0
+def _trans_fat_deduction(value: float, floor: float) -> float:
+    if value <= floor:
+        return 0.0
+    ratio = value / floor
+    if ratio >= 4.0:
+        return -8.0
+    # Smooth continuous linear interpolation between 1.0 (-2) and 4.0 (-8)
+    return -2.0 - (ratio - 1.0) * 2.0
 
-def _kcal_deduction(value: float, cap: int) -> int:
-    if value > cap:         return -4
-    if value > cap * 0.8:   return -2
-    return 0
+def _kcal_deduction(value: float, cap: int) -> float:
+    if value <= cap * 0.8:
+        return 0.0
+    if value >= cap:
+        return -4.0
+    # Smooth continuous linear interpolation between 0.8 * cap (0) and cap (-4)
+    return -20.0 * (value - 0.8 * cap) / cap
+
+
+# ---------------------------------------------------------------------------
+# Heuristic Lists & Detection Helpers
+# ---------------------------------------------------------------------------
+
+_ADDED_SUGAR_KEYWORDS = [
+    "sugar", "sucrose", "glucose", "fructose", "dextrose", "maltose",
+    "syrup", "honey", "jaggery", "molasses", "sweetener", "maltodextrin",
+    "agave", "nectar", "treacle", "caramel", "isoglucose", "invert sugar"
+]
+
+_ARTIFICIAL_SWEETENERS = [
+    "aspartame", "sucralose", "acesulfame", "saccharin", "cyclamate", "neotame",
+    "advantame", "sorbitol", "mannitol", "xylitol", "erythritol", "isomalt",
+    "lactitol", "maltitol", "stevia", "steviol", "thaumatin", "monk fruit"
+]
+
+_NUT_SEED_KEYWORDS = [
+    "peanut", "almond", "cashew", "walnut", "pistachio", "pecan", "hazelnut", 
+    "macadamia", "brazil nut", "pine nut", "chestnut", "nut seed", "chia seed", 
+    "pumpkin seed", "sunflower seed", "flaxseed", "flax seed", "sesame seed", 
+    "hemp seed", "raisin", "date", "fig", "apricot", "prune", "sultana", "currant"
+]
+
+def _has_added_sugars(ingredients_text: str) -> bool:
+    if not ingredients_text:
+        return True
+    text = ingredients_text.lower()
+    return any(keyword in text for keyword in _ADDED_SUGAR_KEYWORDS)
+
+def _has_artificial_sweeteners(ingredients_text: str, additives_tags: list) -> bool:
+    if ingredients_text:
+        text = ingredients_text.lower()
+        if any(keyword in text for keyword in _ARTIFICIAL_SWEETENERS):
+            return True
+            
+    sweetener_codes = {
+        "e950", "e951", "e952", "e953", "e954", "e955", "e957", "e959",
+        "e960", "e961", "e962", "e965", "e966", "e967", "e968"
+    }
+    for tag in additives_tags:
+        code = _extract_enum(tag)
+        if code in sweetener_codes:
+            return True
+            
+    return False
+
+def _is_nut_seed_or_dried_fruit(name: str, category: str, ingredients_text: str) -> bool:
+    name_l = name.lower() if name else ""
+    cat_l = category.lower() if category else ""
+    ing_l = ingredients_text.lower() if ingredients_text else ""
+    
+    for keyword in _NUT_SEED_KEYWORDS:
+        if keyword in name_l or keyword in cat_l:
+            return True
+            
+    if ing_l and len(ing_l) > 0 and len(ing_l) < 30:
+        for keyword in _NUT_SEED_KEYWORDS:
+            if keyword in ing_l:
+                return True
+                
+    return False
 
 
 # ---------------------------------------------------------------------------
 # Pillar 1 — Macronutrient Profile
 # ---------------------------------------------------------------------------
 
-def _score_macronutrients(nutrients: dict, group: str, nova_group: Optional[int],
-                           nutrient_levels: dict) -> tuple[int, list, list]:
-    """Returns (score, deductions, bonuses). Score range: 0–30."""
+def _score_macronutrients(
+    nutrients: dict, 
+    group: str, 
+    nova_group: Optional[int],
+    nutrient_levels: dict,
+    ingredients_text: str,
+    additives_tags: list,
+    is_nut_or_seed: bool,
+    ingredients_count: int
+) -> tuple[float, list, list]:
+    """Returns (score, deductions, bonuses). Score range: 0–35."""
     floors = _THRESHOLDS.get(group, _THRESHOLDS["general"])
     sugar_floor, salt_floor, sat_fat_floor, trans_floor, kcal_cap = floors
     is_protein = (group == "protein_foods")
@@ -155,7 +249,7 @@ def _score_macronutrients(nutrients: dict, group: str, nova_group: Optional[int]
     deductions, bonuses = [], []
 
     if key_count >= 2:
-        base = 30
+        base = 30.0
         sugar  = nutrients.get("sugars_100g", 0) or 0
         salt   = nutrients.get("salt_100g") or (nutrients.get("sodium_100g", 0) or 0) * 2.5
         sat_fat= nutrients.get("saturated-fat_100g", 0) or 0
@@ -164,34 +258,91 @@ def _score_macronutrients(nutrients: dict, group: str, nova_group: Optional[int]
         fiber  = nutrients.get("fiber_100g", 0) or 0
         protein= nutrients.get("proteins_100g", 0) or 0
 
-        # Sugar — may be corrected later for NOVA 1
+        # Heuristic 1: Natural sugar penalty reduction
+        has_added_sugar = _has_added_sugars(ingredients_text)
+        
         s_ded = _sugar_deduction(sugar, sugar_floor)
         if s_ded < 0:
-            # Natural sugar correction: NOVA 1 whole food — halve penalty
-            if nova_group == 1 and sugar > sugar_floor * 3:
-                s_ded = s_ded // 2
-                bonuses.append({"reason": f"Natural sugar ({sugar:.1f}g/100g) in unprocessed food — penalty halved", "points": abs(s_ded)})
-            deductions.append({"reason": f"Sugar: {sugar:.1f}g/100g (group safe floor: {sugar_floor}g)", "points": s_ded})
+            if not has_added_sugar:
+                s_ded = s_ded * 0.2
+                bonuses.append({
+                    "reason": f"Natural sugar ({sugar:.1f}g/100g) — unsweetened product — penalty discounted by 80%", 
+                    "points": round(abs(s_ded * 4.0), 1)
+                })
+            elif nova_group == 1:
+                s_ded = s_ded * 0.5
+                bonuses.append({
+                    "reason": f"Natural sugar ({sugar:.1f}g/100g) in unprocessed whole food — penalty halved", 
+                    "points": round(abs(s_ded), 1)
+                })
+            
+            if s_ded < -0.1:
+                deductions.append({
+                    "reason": f"Sugar: {sugar:.1f}g/100g (group safe floor: {sugar_floor}g)", 
+                    "points": round(s_ded, 1)
+                })
 
         sl_ded = _salt_deduction(salt, salt_floor)
-        if sl_ded < 0:
-            deductions.append({"reason": f"Salt: {salt:.2f}g/100g (group safe floor: {salt_floor}g)", "points": sl_ded})
+        if sl_ded < -0.1:
+            deductions.append({
+                "reason": f"Salt: {salt:.2f}g/100g (group safe floor: {salt_floor}g)", 
+                "points": round(sl_ded, 1)
+            })
 
+        # Heuristic 2: Saturated fat penalty reduction for nuts/seeds or single-ingredients
+        is_single_ingredient = (ingredients_count == 1)
         sf_ded = _sat_fat_deduction(sat_fat, sat_fat_floor, is_protein)
         if sf_ded < 0:
-            deductions.append({"reason": f"Saturated fat: {sat_fat:.1f}g/100g (group safe floor: {sat_fat_floor}g)", "points": sf_ded})
+            if is_nut_or_seed:
+                sf_ded = sf_ded * 0.2
+                bonuses.append({
+                    "reason": "Cardioprotective natural fats in nuts/seeds — saturated fat penalty discounted by 80%",
+                    "points": round(abs(sf_ded * 4.0), 1)
+                })
+            elif is_single_ingredient:
+                sf_ded = sf_ded * 0.5
+                bonuses.append({
+                    "reason": "Single-ingredient natural whole fat — saturated fat penalty halved",
+                    "points": round(abs(sf_ded), 1)
+                })
+                
+            if sf_ded < -0.1:
+                deductions.append({
+                    "reason": f"Saturated fat: {sat_fat:.1f}g/100g (group safe floor: {sat_fat_floor}g)", 
+                    "points": round(sf_ded, 1)
+                })
 
         tf_ded = _trans_fat_deduction(trans, trans_floor)
-        if tf_ded < 0:
-            deductions.append({"reason": f"Trans fat: {trans:.2f}g/100g", "points": tf_ded})
+        if tf_ded < -0.1:
+            deductions.append({
+                "reason": f"Trans fat: {trans:.2f}g/100g", 
+                "points": round(tf_ded, 1)
+            })
 
         kd_ded = _kcal_deduction(kcal, kcal_cap)
         if kd_ded < 0:
-            deductions.append({"reason": f"High caloric density: {kcal:.0f} kcal/100g", "points": kd_ded})
+            if is_nut_or_seed:
+                kd_ded = 0.0
+                bonuses.append({
+                    "reason": "Nutrient-dense whole nuts/seeds — high caloric density penalty waived",
+                    "points": 0.0
+                })
+            elif is_single_ingredient:
+                kd_ded = kd_ded * 0.5
+                bonuses.append({
+                    "reason": "Single-ingredient natural food — high caloric density penalty halved",
+                    "points": round(abs(kd_ded), 1)
+                })
+                
+            if kd_ded < -0.1:
+                deductions.append({
+                    "reason": f"High caloric density: {kcal:.0f} kcal/100g", 
+                    "points": round(kd_ded, 1)
+                })
 
         # Oils — fat content not penalised
         if group == "oils":
-            sf_ded = max(sf_ded, -3)  # soften sat fat cap for oils
+            sf_ded = max(sf_ded, -3.0)  # soften sat fat cap for oils
 
         fiber_bonus = 6 if fiber >= 8 else (4 if fiber >= 5 else (2 if fiber >= 3 else 0))
         if fiber_bonus:
@@ -201,22 +352,34 @@ def _score_macronutrients(nutrients: dict, group: str, nova_group: Optional[int]
         if protein_bonus:
             bonuses.append({"reason": f"Good protein: {protein:.1f}g/100g", "points": protein_bonus})
 
-        total_ded = s_ded + sl_ded + sf_ded + tf_ded + kd_ded
+        # Heuristic 3: Diet Soda / Artificial Sweetener "Chemical Masquerade" Penalty
+        sweetener_penalty = 0.0
+        if _has_artificial_sweeteners(ingredients_text, additives_tags):
+            sweetener_penalty = -10.0
+            deductions.append({
+                "reason": "Artificially sweetened — chemical masquerade penalty applied", 
+                "points": -10.0
+            })
+
+        total_ded = s_ded + sl_ded + sf_ded + tf_ded + kd_ded + sweetener_penalty
         score = base + total_ded + fiber_bonus + protein_bonus
 
     else:
         # Fallback: use nutrient_levels dict (high/moderate/low)
-        base = 15  # data penalty
+        base = 15.0
         score = base
-        level_map = {"high": -4, "moderate": -2, "low": 0}
+        level_map = {"high": -4.0, "moderate": -2.0, "low": 0.0}
         for nutrient_key in ["sugars", "fat", "salt", "saturated-fat"]:
             level = nutrient_levels.get(nutrient_key, "")
-            ded = level_map.get(level, 0)
+            ded = level_map.get(level, 0.0)
             if ded:
-                deductions.append({"reason": f"{nutrient_key} level: {level} (from nutrient_levels, no exact data)", "points": ded})
+                deductions.append({
+                    "reason": f"{nutrient_key} level: {level} (from nutrient_levels, no exact data)", 
+                    "points": ded
+                })
                 score += ded
 
-    return max(0, min(30, score)), deductions, bonuses
+    return max(0.0, min(35.0, score)), deductions, bonuses
 
 
 # ---------------------------------------------------------------------------
@@ -409,43 +572,86 @@ _RED_FLAG_INGREDIENTS = [
 _SUGAR_FIRST_TERMS = {"sugar", "sucrose", "glucose", "fructose", "dextrose",
                        "corn syrup", "cane sugar", "invert sugar"}
 
-def _score_ingredient_integrity(ingredients: list, ingredients_text: str) -> tuple[int, list, list]:
-    base = 10
+def _score_ingredient_integrity(ingredients: list, ingredients_text: str, additives_tags: list = None) -> tuple[float, list, list]:
+    base = 10.0
     deductions, bonuses = [], []
     text_lower = ingredients_text.lower()
+    additives_tags = additives_tags or []
 
     # Count penalty
     count = len(ingredients)
     if count > 30:
-        d = -4
+        d = -4.0
     elif count > 20:
-        d = -3
+        d = -3.0
     elif count > 10:
-        d = -2
+        d = -2.0
     elif count > 5:
-        d = -1
+        d = -1.0
     else:
-        d = 0
+        d = 0.0
     if d:
         deductions.append({"reason": f"High ingredient count ({count}) — indicator of complexity/processing", "points": d})
         base += d
 
     # Red flag scan (max -4 total from flags)
-    flag_total = 0
+    flag_total = 0.0
     for phrase, pts in _RED_FLAG_INGREDIENTS:
-        if phrase in text_lower and flag_total > -4:
+        if phrase in text_lower and flag_total > -4.0:
             deductions.append({"reason": f"Contains '{phrase}'", "points": pts})
             base += pts
             flag_total += pts
+
+    # Refined / Inflammatory Oils Scan (max -4.0)
+    oil_ded = 0.0
+    detected_oils = []
+    if any(p in text_lower for p in ["palm oil", "palm olein", "palm kernel", "hydrogenated palm"]):
+        oil_ded = -4.0
+        detected_oils.append("palm oil/olein")
+    elif any(p in text_lower for p in ["soybean oil", "soy oil", "vegetable oil", "canola oil", "rapeseed oil", "sunflower oil", "corn oil", "cottonseed oil"]):
+        oil_ded = -2.0
+        detected_oils.append("refined vegetable oil")
+    if oil_ded < 0.0:
+        deductions.append({
+            "reason": f"Contains refined inflammatory oil ({', '.join(detected_oils)})", 
+            "points": oil_ded
+        })
+        base += oil_ded
+
+    # Glycemic Fillers Scan (max -3.0)
+    filler_ded = 0.0
+    detected_fillers = []
+    if "maltodextrin" in text_lower:
+        filler_ded -= 2.0
+        detected_fillers.append("maltodextrin")
+    if any(p in text_lower for p in ["modified starch", "modified corn starch", "modified tapioca starch", "dextrin"]):
+        filler_ded -= 1.5
+        detected_fillers.append("modified starch/dextrin")
+    
+    filler_ded = max(-3.0, filler_ded)
+    if filler_ded < 0.0:
+        deductions.append({
+            "reason": f"Contains high-glycemic filler ({', '.join(detected_fillers)})", 
+            "points": filler_ded
+        })
+        base += filler_ded
+
+    # Artificial Sweetener scanner in Pillar 5 (-3.0)
+    if _has_artificial_sweeteners(ingredients_text, additives_tags):
+        deductions.append({
+            "reason": "Contains artificial/synthetic sweetener (integrity penalty)", 
+            "points": -3.0
+        })
+        base += -3.0
 
     # Sugar-first penalty
     if ingredients:
         first = ingredients[0].lower()
         if any(term in first for term in _SUGAR_FIRST_TERMS):
-            deductions.append({"reason": "Sugar/sweetener is the primary ingredient (listed first by weight)", "points": -2})
-            base -= 2
+            deductions.append({"reason": "Sugar/sweetener is the primary ingredient (listed first by weight)", "points": -2.0})
+            base -= 2.0
 
-    return max(0, min(10, base)), deductions, bonuses
+    return max(0.0, min(10.0, base)), deductions, bonuses
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +727,7 @@ def compute_health_score(
     ingredients_text: str,
     categories: Optional[str],
     serving_size: Optional[str],
+    product_name: Optional[str] = None,
 ) -> ScoringResult:
     """
     Run the full 5-pillar scoring engine and return a ScoringResult.
@@ -541,9 +748,19 @@ def compute_health_score(
     alcohol = nutrients.get("alcohol_100g", 0) or 0
     alcohol_capped = alcohol > 0.5
 
+    # Detect nut/seed/dried fruit
+    is_nut_or_seed = _is_nut_seed_or_dried_fruit(product_name, categories, ingredients_text)
+
     # ── Pillar 1: Macronutrients ────────────────────────────────────────────
     p1_base, p1_ded, p1_bon = _score_macronutrients(
-        nutrients, group, nova_group, nutrient_levels
+        nutrients=nutrients,
+        group=group,
+        nova_group=nova_group,
+        nutrient_levels=nutrient_levels,
+        ingredients_text=ingredients_text,
+        additives_tags=additives_tags,
+        is_nut_or_seed=is_nut_or_seed,
+        ingredients_count=len(ingredients),
     )
 
     # Apply serving size multiplier to Pillar 1 deductions only
@@ -551,15 +768,15 @@ def compute_health_score(
     if srv_mult != 1.0:
         adjusted_p1_ded = []
         for d in p1_ded:
-            new_pts = int(d["points"] * srv_mult)
+            new_pts = round(d["points"] * srv_mult, 1)
             adjusted_p1_ded.append({
                 **d,
                 "points": new_pts,
                 "note": f"adjusted for serving size ({serving_grams:.0f}g)" if srv_mult < 1 else None
             })
         p1_ded = adjusted_p1_ded
-        p1_base_adjusted = 30 + sum(d["points"] for d in p1_ded) + sum(b["points"] for b in p1_bon)
-        p1_base = max(0, min(30, p1_base_adjusted))
+        p1_base_adjusted = 30.0 + sum(d["points"] for d in p1_ded) + sum(b["points"] for b in p1_bon)
+        p1_base = max(0.0, min(35.0, p1_base_adjusted))
 
     all_deductions.extend(p1_ded)
     all_bonuses.extend(p1_bon)
@@ -584,7 +801,11 @@ def compute_health_score(
     all_bonuses.extend(p4_bon)
 
     # ── Pillar 5: Ingredient integrity ─────────────────────────────────────
-    p5, p5_ded, p5_bon = _score_ingredient_integrity(ingredients, ingredients_text)
+    p5, p5_ded, p5_bon = _score_ingredient_integrity(
+        ingredients=ingredients,
+        ingredients_text=ingredients_text,
+        additives_tags=additives_tags,
+    )
     all_deductions.extend(p5_ded)
     all_bonuses.extend(p5_bon)
 
@@ -592,13 +813,22 @@ def compute_health_score(
     raw = p1_base + micro_bonus + p2 + p3 + p4 + p5
 
     if alcohol_capped:
-        raw = min(raw, 40)
+        raw = min(raw, 40.0)
         all_deductions.insert(0, {
             "reason": f"Contains alcohol ({alcohol:.1f}g/100g) — score hard-capped at 40",
             "points": "cap"
         })
 
-    health_score = max(0, min(100, raw))
+    # Hard cap for artificial sweeteners (Diet Soda Loophole Fix)
+    has_sweeteners = _has_artificial_sweeteners(ingredients_text, additives_tags)
+    if has_sweeteners:
+        raw = min(raw, 65.0)
+        all_deductions.insert(0, {
+            "reason": "Contains artificial/synthetic sweeteners — score hard-capped at 65 to prevent chemical masquerading",
+            "points": "cap"
+        })
+
+    health_score = int(max(0.0, min(100.0, raw)))
 
     confidence = _compute_confidence(
         nutrients, nutrient_levels, nova_group,
@@ -620,7 +850,7 @@ def compute_health_score(
             "ingredient_integrity": p5,
         },
         deductions=[d for d in all_deductions if d.get("points") != 0],
-        bonuses=[b for b in all_bonuses if b.get("points", 1) != 0],
+        bonuses=all_bonuses,
         data_confidence=confidence,
         category_group=group,
         alcohol_capped=alcohol_capped,

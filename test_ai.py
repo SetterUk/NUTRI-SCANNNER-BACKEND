@@ -29,7 +29,8 @@ async def test_ai():
             ingredients=ingredients_list,
             ingredients_text=ingredients_text,
             categories="confectionery",
-            serving_size=None
+            serving_size=None,
+            product_name=product_name
         )
 
         result = await analyze_product_detailed(
