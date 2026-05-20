@@ -7,8 +7,7 @@ httpx
 python-dotenv
 langgraph
 groq
-passlib[bcrypt]
-bcrypt==3.2.0
+bcrypt
 python-jose[cryptography]
 python-multipart
 google-auth
