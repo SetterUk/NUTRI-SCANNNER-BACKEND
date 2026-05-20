@@ -5,8 +5,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Nutri Scanner"
     VERSION: str = "1.0.0"
     DATABASE_URL: str
-    GROQ_API_KEY: str
-    SECRET_KEY: str
+    GROQ_API_KEY: str = ""
+    SECRET_KEY: str = "supersecretfallbackkeyfornutriscannerapi"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # Google Auth Configuration
