@@ -4,7 +4,7 @@ services:
     env: docker
     region: ohio
     plan: free
-    branch: purva-main
+    branch: main
     envVars:
       - key: DATABASE_URL
         sync: false
