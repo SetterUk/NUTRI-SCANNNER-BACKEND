@@ -393,6 +393,9 @@ class ProfileUpdateRequest(BaseModel):
     health_goals: Optional[str] = None
     allergies: Optional[List[str]] = None
     health_tags: Optional[List[str]] = None
+    age: Optional[int] = None
+    height: Optional[float] = None
+    weight_kg: Optional[float] = None
 
 @router.put("/profile")
 async def update_profile(
@@ -417,6 +420,12 @@ async def update_profile(
         profile.allergies = data.allergies
     if data.health_tags is not None:
         profile.health_tags = data.health_tags
+    if data.age is not None:
+        profile.age = data.age
+    if data.height is not None:
+        profile.height = data.height
+    if data.weight_kg is not None:
+        profile.weight_kg = data.weight_kg
 
     await session.commit()
     return {"status": "success", "message": "Profile updated successfully"}
