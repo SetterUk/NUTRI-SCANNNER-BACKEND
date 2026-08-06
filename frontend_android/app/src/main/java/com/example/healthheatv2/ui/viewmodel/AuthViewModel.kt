@@ -1,6 +1,8 @@
 package com.example.healthheatv2.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -21,7 +23,9 @@ sealed class AuthState {
     data class Error(val message: String) : AuthState()
 }
 
-class AuthViewModel : ViewModel() {
+class AuthViewModel(application: Application) : AndroidViewModel(application) {
+    private val prefs = application.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+
     private val auth: FirebaseAuth? = try {
         FirebaseAuth.getInstance()
     } catch (e: Exception) {
@@ -36,22 +40,16 @@ class AuthViewModel : ViewModel() {
 
     init {
         val user = auth?.currentUser
-        if (user != null) {
+        val savedToken = prefs.getString("backend_token", null)
+        
+        if (user != null && savedToken != null) {
+            RetrofitClient.authToken = savedToken
             _authState.value = AuthState.Success
-            // Restore backend token silently in background
-            viewModelScope.launch {
-                try {
-                    val idTokenResult = user.getIdToken(false).await()
-                    val idToken = idTokenResult.token
-                    if (idToken != null) {
-                        val backendResponse = RetrofitClient.apiService.googleAuth(TokenData(idToken))
-                        RetrofitClient.authToken = backendResponse.accessToken
-                        fetchProfile()
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("Auth", "Failed to restore token", e)
-                }
-            }
+            fetchProfile()
+        } else {
+            auth?.signOut()
+            prefs.edit().remove("backend_token").apply()
+            RetrofitClient.authToken = null
         }
     }
 
@@ -61,7 +59,9 @@ class AuthViewModel : ViewModel() {
             try {
                 // Send the raw Google ID token to our backend FIRST
                 val backendResponse = RetrofitClient.apiService.googleAuth(TokenData(idToken))
-                RetrofitClient.authToken = backendResponse.accessToken
+                val accessToken = backendResponse.accessToken
+                RetrofitClient.authToken = accessToken
+                prefs.edit().putString("backend_token", accessToken).apply()
                 
                 // Then optionally login to Firebase
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -91,6 +91,8 @@ class AuthViewModel : ViewModel() {
 
     fun signOut() {
         auth?.signOut()
+        prefs.edit().remove("backend_token").apply()
+        RetrofitClient.authToken = null
         _userProfile.value = null
         _authState.value = AuthState.Idle
     }
