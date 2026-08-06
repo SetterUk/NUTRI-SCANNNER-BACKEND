@@ -41,3 +41,9 @@ class UserProfile(SQLModel, table=True):
     
     # Relationship back to user
     user: Optional[User] = Relationship(back_populates="profile")
+
+class UserScan(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    barcode: str = Field(foreign_key="product.barcode", index=True)
+    scanned_at: datetime = Field(default_factory=datetime.utcnow)

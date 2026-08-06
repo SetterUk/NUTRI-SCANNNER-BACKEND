@@ -10,10 +10,15 @@ It does NOT output any numeric scores.
 """
 
 import json
+import logging
+import time
 from groq import AsyncGroq
 from app.core.config import settings
 from app.models.schemas import AIAnalysisResult
 from app.services.scoring import ScoringResult
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
@@ -116,6 +121,10 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema:
 """
 
     try:
+        logger.info(f"Nutritionist Agent: Calling Groq API for '{product_name}'...")
+        logger.debug(f"Groq API Prompt:\n{prompt}")
+        
+        start_time = time.time()
         chat_completion = await client.chat.completions.create(
             messages=[
                 {
@@ -134,8 +143,12 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema:
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"},
         )
+        duration = time.time() - start_time
 
         response_text = chat_completion.choices[0].message.content
+        logger.info(f"Nutritionist Agent: Groq API responded in {duration:.2f}s.")
+        logger.debug(f"Groq API Response:\n{response_text}")
+        
         llm_output = json.loads(response_text)
 
         # Merge locked scores with LLM-generated text
@@ -155,7 +168,7 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema:
         )
 
     except Exception as e:
-        print(f"LLM text generation failed: {e}")
+        logger.error(f"Nutritionist Agent: LLM text generation failed: {e}", exc_info=True)
         # Fallback: use locked scores with minimal text
         return AIAnalysisResult(
             verdict=scoring.verdict,

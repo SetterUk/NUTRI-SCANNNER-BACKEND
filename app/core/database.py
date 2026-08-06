@@ -5,7 +5,7 @@ from app.core.config import settings
 
 # Import models to ensure they are registered with SQLModel.metadata
 from app.models.products import Product, UserAddedProduct
-from app.models.users import User, UserProfile
+from app.models.users import User, UserProfile, UserScan
 
 
 engine = create_async_engine(

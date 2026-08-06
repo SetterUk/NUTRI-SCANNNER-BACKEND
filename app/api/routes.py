@@ -7,16 +7,26 @@ from app.models.products import Product, UserAddedProduct
 from app.services.openfoodfacts import get_product_from_api
 from app.models.schemas import ProductResponse, ReportMissingRequest, ManualProductRequest, UserRegister, UserLogin
 from app.api.deps import create_access_token, get_current_user, get_password_hash, verify_password, get_current_user_optional
-from app.models.users import User, UserProfile
+from app.models.users import User, UserProfile, UserScan
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from app.core.config import settings
 from pydantic import BaseModel
+from sqlalchemy.orm import selectinload
+from typing import List
 
 # --- 1. IMPORT THE LANGGRAPH WORKFLOW ---
 from app.agents.workflow import nutrition_app_workflow
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 router = APIRouter()
+
+@router.get("/ping")
+async def ping():
+    return {"ping": "pong"}
 
 class TokenData(BaseModel):
     id_token: str
@@ -122,6 +132,7 @@ async def scan_product(
     session: AsyncSession = Depends(get_session),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
+    print(f"DEBUG: Received scan request for {barcode}")
     # Fetch user profile for personalization if user is authenticated
     profile = None
     if current_user:
@@ -130,13 +141,17 @@ async def scan_product(
         profile = profile_result.scalars().first()
 
     # 1. CHECK CACHE FOR BASE PRODUCT DATA
+    logger.info(f"Querying DB for barcode {barcode}")
     statement = select(Product).where(Product.barcode == barcode)
     result = await session.execute(statement)
     product = result.scalars().first()
+    logger.info(f"DB query finished for barcode {barcode}")
 
     if not product:
         # 2. FETCH EXTERNAL DATA IF NOT IN CACHE
+        logger.info(f"Fetching from OFF API for {barcode}")
         raw_data = await get_product_from_api(barcode)
+        logger.info(f"OFF API response received for {barcode}")
         if not raw_data:
             raise HTTPException(status_code=404, detail="Product not found in global database.")
 
@@ -171,10 +186,15 @@ async def scan_product(
         product.scan_count += 1
         session.add(product)
 
-    # Use actual product data (either from cache or fresh OFF) for analysis
-    # This ensures consistency
-    
-    # --- 3. RUN PERSONALIZED AGENTIC WORKFLOW ---
+    # 3. USE CACHED AI ANALYSIS IF AVAILABLE
+    if product.health_score is not None:
+        logger.info(f"Serving cached AI analysis for barcode {barcode}")
+        await session.commit()
+        await session.refresh(product)
+        return product.model_dump()
+
+    # --- 4. RUN PERSONALIZED AGENTIC WORKFLOW ---
+    logger.info(f"Running agent workflow for barcode {barcode}")
     initial_state = {
         "barcode": barcode,
         "product_name": product.name,
@@ -202,10 +222,24 @@ async def scan_product(
     }
 
     try:
+        logger.info("Calling nutrition_app_workflow")
         final_state = await nutrition_app_workflow.ainvoke(initial_state)
+        logger.info("Workflow completed")
         agent_output = final_state.get("final_response", {})
+        
+        # Save AI output to product cache
+        product.verdict = agent_output.get("verdict")
+        product.is_good_for_health = agent_output.get("is_good_for_health")
+        product.health_reason = agent_output.get("health_reason")
+        product.health_scale = agent_output.get("health_scale")
+        product.safe_consumption_frequency = agent_output.get("safe_consumption_frequency")
+        product.health_score = agent_output.get("health_score")
+        product.summary = agent_output.get("summary")
+        product.ingredients_analysis = agent_output.get("ingredients_analysis", [])
+        product.nutrition_analysis = agent_output.get("nutrition_analysis", {})
+        
     except Exception as e:
-        print(f"⚠️ Agent Workflow Failed: {e}")
+        logger.error(f"Agent Workflow Failed for {barcode}: {e}", exc_info=True)
         agent_output = {
             "verdict": "PASS",
             "health_score": 0,
@@ -215,6 +249,13 @@ async def scan_product(
 
     await session.commit()
     await session.refresh(product)
+
+    # 5. LOG THE SCAN FOR THE USER
+    if current_user:
+        # Check if they already scanned this recently (optional, but let's just log it)
+        user_scan = UserScan(user_id=current_user.id, barcode=barcode)
+        session.add(user_scan)
+        await session.commit()
 
     # Build response: Product Data + Personalized Analysis
     response_data = product.model_dump()
@@ -240,3 +281,64 @@ async def report_missing_product(
     session.add(new_log)
     await session.commit()
     return {"status": "success", "message": "Product reported successfully"}
+
+@router.get("/history", response_model=List[ProductResponse])
+async def get_user_history(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns the list of products previously scanned by the user, ordered by most recent.
+    """
+    statement = (
+        select(Product)
+        .join(UserScan, UserScan.barcode == Product.barcode)
+        .where(UserScan.user_id == current_user.id)
+        .order_by(UserScan.scanned_at.desc())
+    )
+    result = await session.execute(statement)
+    # Use unique() since a user might scan the same product multiple times
+    products = result.scalars().unique().all()
+    
+    # We might have duplicates if they scanned multiple times, let's keep only unique products while preserving order
+    seen = set()
+    unique_products = []
+    for p in products:
+        if p.barcode not in seen:
+            seen.add(p.barcode)
+            unique_products.append(p)
+
+    return unique_products
+
+class ProfileUpdateRequest(BaseModel):
+    dietary_preferences: Optional[str] = None
+    health_goals: Optional[str] = None
+    allergies: Optional[List[str]] = None
+    health_tags: Optional[List[str]] = None
+
+@router.put("/profile")
+async def update_profile(
+    data: ProfileUpdateRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Update User Profile Data (Allergies, Diets, etc.)"""
+    stmt = select(UserProfile).where(UserProfile.user_id == current_user.id)
+    res = await session.execute(stmt)
+    profile = res.scalars().first()
+
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        session.add(profile)
+
+    if data.dietary_preferences is not None:
+        profile.dietary_preferences = data.dietary_preferences
+    if data.health_goals is not None:
+        profile.health_goals = data.health_goals
+    if data.allergies is not None:
+        profile.allergies = data.allergies
+    if data.health_tags is not None:
+        profile.health_tags = data.health_tags
+
+    await session.commit()
+    return {"status": "success", "message": "Profile updated successfully"}
