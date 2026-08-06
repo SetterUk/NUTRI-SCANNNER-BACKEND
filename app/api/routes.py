@@ -394,6 +394,24 @@ async def get_user_history(
 
     return unique_products
 
+@router.get("/profile")
+async def get_profile(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get the current user's profile"""
+    stmt = select(UserProfile).where(UserProfile.user_id == current_user.id)
+    res = await session.execute(stmt)
+    profile = res.scalars().first()
+
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        session.add(profile)
+        await session.commit()
+        await session.refresh(profile)
+
+    return profile
+
 class ProfileUpdateRequest(BaseModel):
     dietary_preferences: Optional[str] = None
     health_goals: Optional[str] = None
