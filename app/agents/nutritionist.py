@@ -52,7 +52,7 @@ ROLE: Clinical Nutritionist — Text Explanation Specialist.
 CONTEXT:
 A deterministic scoring engine has already computed all numeric scores for "{product_name}".
 Your job is ONLY to explain those scores in clear, clinical language.
-You MUST NOT change or recompute any of the scores below.
+You MUST NOT change or recompute the numeric score, BUT you MUST override `verdict`, `is_good_for_health`, and `safe_consumption_frequency` if you detect a critical ALLERGY hazard or severe DIETARY PROFILE violation.
 
 LOCKED SCORES (do not alter):
 - health_score: {scoring.health_score} / 100
@@ -66,7 +66,8 @@ LOCKED SCORES (do not alter):
 
 USER DIETARY PROFILE (CRITICAL CONTEXT):
 {json.dumps(user_profile, indent=2) if user_profile else "No specific dietary preferences set. Provide general health advice."}
-If the user has dietary preferences (e.g., Vegan, Keto) or health tags (e.g., Diabetic), you MUST explicitly address how this product aligns or conflicts with their specific profile in the `health_reason` and `summary`.
+If the user has dietary preferences (e.g., Vegan, Keto), health tags (e.g., Diabetic), or ALLERGIES, you MUST explicitly address how this product aligns or conflicts with their specific profile in the `health_reason` and `summary`.
+CRITICAL OVERRIDE: If the product contains an ingredient the user is allergic to, or blatantly violates their dietary preference (e.g. meat for a Vegan), you MUST change the `verdict` to "Dangerous", set `is_good_for_health` to false, and set `safe_consumption_frequency` to "Avoid completely".
 
 SCORE BREAKDOWN (what drove the score):
 Pillar scores:
