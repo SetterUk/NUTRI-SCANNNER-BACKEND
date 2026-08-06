@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,6 +96,21 @@ fun App(modifier: Modifier = Modifier) {
             }
         )
         val authViewModel: AuthViewModel = viewModel()
+        val userProfile by authViewModel.userProfile.collectAsState()
+
+        // Decide start destination:
+        // - Not logged in → Auth screen
+        // - Logged in, profile is empty (no age/weight) → Onboarding (can skip)
+        // - Logged in, profile already filled → SearchHub directly
+        val isLoggedIn = authViewModel.getCurrentUser() != null
+        val hasProfile = userProfile?.let {
+            it.age != null || it.weightKg != null || it.height != null
+        } ?: false
+        val startDestination = when {
+            !isLoggedIn -> Screen.Auth.route
+            hasProfile  -> Screen.SearchHub.route
+            else        -> Screen.Onboarding.route
+        }
 
         val bottomNavItems = listOf(
             BottomNavItem("Home", Screen.SearchHub.route, Icons.Filled.Home, Icons.Outlined.Home),
@@ -116,7 +132,7 @@ fun App(modifier: Modifier = Modifier) {
         ) {
             NavHost(
                 navController = navController,
-                startDestination = if (authViewModel.getCurrentUser() != null) Screen.SearchHub.route else Screen.Auth.route,
+                startDestination = startDestination,
                 modifier = modifier.fillMaxSize()
             ) {
                 composable(Screen.Auth.route) {
