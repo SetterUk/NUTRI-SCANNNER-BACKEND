@@ -4,18 +4,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.healthheatv2.ui.theme.LocalAppColors
@@ -31,14 +35,17 @@ fun OnboardingScreen(
 ) {
     val colors = LocalAppColors.current
     val coroutineScope = rememberCoroutineScope()
-    
+
+    var currentStep by remember { mutableStateOf(0) }
+    val totalSteps = 3
+
     var preferredName by remember { mutableStateOf("") }
     var age by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
     var height by remember { mutableStateOf("") }
     var allergies by remember { mutableStateOf("") }
     var healthGoals by remember { mutableStateOf("") }
-    
+
     var isSaving by remember { mutableStateOf(false) }
 
     Box(
@@ -47,11 +54,9 @@ fun OnboardingScreen(
             .background(colors.background)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Top Bar with Skip Button
+            // ── Top Bar ───────────────────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -60,185 +65,353 @@ fun OnboardingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Health Profile",
-                    color = colors.textPrimary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                // Step dots
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(totalSteps) { i ->
+                        Box(
+                            modifier = Modifier
+                                .size(if (i == currentStep) 24.dp else 8.dp, 8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(
+                                    if (i <= currentStep) colors.accentGreen
+                                    else colors.card
+                                )
+                        )
+                    }
+                }
                 IconButton(onClick = onFinish) {
-                    Icon(Icons.Filled.Close, contentDescription = "Skip", tint = colors.textSecondary)
+                    Icon(Icons.Filled.Close, contentDescription = "Skip all", tint = colors.textSecondary)
                 }
             }
 
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    text = "Help the AI know you better",
-                    color = colors.textPrimary,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Every day, millions of people pick up a product without truly knowing what's inside it. We built HealthHeat to change that — not just for athletes or nutritionists, but for every person, every family.\n\nYour health is personal. Tell us a little about yourself, and we'll give you answers that actually speak to you. 💚",
-                    color = colors.textSecondary,
-                    fontSize = 15.sp,
-                    lineHeight = 24.sp
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
+            // ── Page Content ─────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                when (currentStep) {
 
-                OutlinedTextField(
-                    value = preferredName,
-                    onValueChange = { preferredName = it },
-                    label = { Text("Your name") },
-                    placeholder = { Text("What should we call you?") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accentGreen,
-                        unfocusedBorderColor = colors.border,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        cursorColor = colors.accentGreen
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Age
-                OutlinedTextField(
-                    value = age,
-                    onValueChange = { age = it },
-                    label = { Text("Age") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accentGreen,
-                        unfocusedBorderColor = colors.border,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        cursorColor = colors.accentGreen
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Height
-                    OutlinedTextField(
-                        value = height,
-                        onValueChange = { height = it },
-                        label = { Text("Height (cm)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colors.accentGreen,
-                            unfocusedBorderColor = colors.border,
-                            focusedTextColor = colors.textPrimary,
-                            unfocusedTextColor = colors.textPrimary,
-                            cursorColor = colors.accentGreen
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    // Weight
-                    OutlinedTextField(
-                        value = weight,
-                        onValueChange = { weight = it },
-                        label = { Text("Weight (kg)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colors.accentGreen,
-                            unfocusedBorderColor = colors.border,
-                            focusedTextColor = colors.textPrimary,
-                            unfocusedTextColor = colors.textPrimary,
-                            cursorColor = colors.accentGreen
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Allergies
-                OutlinedTextField(
-                    value = allergies,
-                    onValueChange = { allergies = it },
-                    label = { Text("Allergies (e.g. Peanuts, Dairy)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accentGreen,
-                        unfocusedBorderColor = colors.border,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        cursorColor = colors.accentGreen
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Health Goals
-                OutlinedTextField(
-                    value = healthGoals,
-                    onValueChange = { healthGoals = it },
-                    label = { Text("Health Goals & Conditions") },
-                    placeholder = { Text("e.g. Weight loss, Diabetic") },
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
-                    maxLines = 4,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accentGreen,
-                        unfocusedBorderColor = colors.border,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        cursorColor = colors.accentGreen
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(48.dp))
-
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            isSaving = true
-                            try {
-                                val profileData = mutableMapOf<String, Any>()
-                                if (preferredName.isNotBlank()) profileData["preferred_name"] = preferredName
-                                if (age.isNotBlank()) profileData["age"] = age.toIntOrNull() ?: 0
-                                if (height.isNotBlank()) profileData["height"] = height.toDoubleOrNull() ?: 0.0
-                                if (weight.isNotBlank()) profileData["weight_kg"] = weight.toDoubleOrNull() ?: 0.0
-                                if (allergies.isNotBlank()) {
-                                    profileData["allergies"] = allergies.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                                }
-                                if (healthGoals.isNotBlank()) profileData["health_goals"] = healthGoals
-                                
-                                RetrofitClient.apiService.updateProfile(profileData)
-                                authViewModel.fetchProfile() // Refresh profile in viewmodel
-                                onFinish()
-                            } catch (e: Exception) {
-                                // Ignore for now
-                            } finally {
-                                isSaving = false
-                            }
+                    // ═══════════════════════════════════════════════════════
+                    // PAGE 1 — WHY WE EXIST
+                    // ═══════════════════════════════════════════════════════
+                    0 -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 28.dp, vertical = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            Text(
+                                text = "💚",
+                                fontSize = 52.sp,
+                            )
+                            Text(
+                                text = "We care about you.\nReally.",
+                                color = colors.textPrimary,
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                lineHeight = 36.sp
+                            )
+                            Text(
+                                text = "Someone who loves you has probably said 'watch what you eat' — but never explained how.\n\nWe built HealthHeat because that gap breaks our hearts. People get sick from things they never knew were harmful. Families make choices they wouldn't make if they just had the right information.\n\nYou deserve better than that. Tell us about yourself — your allergies, your goals, your life — and we'll make sure every scan speaks directly to you. Because your health isn't generic. And neither are we. 💚",
+                                color = colors.textSecondary,
+                                fontSize = 16.sp,
+                                lineHeight = 26.sp
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen),
-                    enabled = !isSaving
-                ) {
-                    if (isSaving) {
-                        CircularProgressIndicator(color = colors.background, modifier = Modifier.size(24.dp))
-                    } else {
-                        Text("Save & Continue", color = colors.background, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // ═══════════════════════════════════════════════════════
+                    // PAGE 2 — HOW COMPANIES FOOL YOU
+                    // ═══════════════════════════════════════════════════════
+                    1 -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 28.dp, vertical = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            Text(
+                                text = "🔍",
+                                fontSize = 52.sp,
+                            )
+                            Text(
+                                text = "The label lies.\nHere's the truth.",
+                                color = colors.textPrimary,
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                lineHeight = 36.sp
+                            )
+                            Text(
+                                text = "Food companies are legally allowed to mislead you — and they do it every single day on supermarket shelves.",
+                                color = colors.textSecondary,
+                                fontSize = 16.sp,
+                                lineHeight = 26.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            val tricks = listOf(
+                                Pair("\"0g Trans Fat\"", "A product can contain up to 0.5g trans fat per serving and still legally claim zero. Companies just shrink the serving size."),
+                                Pair("\"Natural\" or \"Natural Flavors\"", "This label means almost nothing. Legally, it can include highly processed chemical compounds derived from a natural source."),
+                                Pair("\"Low Fat\"", "When fat is removed, food tastes bland. Companies replace it with sugar, salt, and additives — making it often worse than the original."),
+                                Pair("\"Made with Real Fruit\"", "That picture of strawberries on the box? The product might contain 2% real fruit. The rest is artificial flavoring and dye."),
+                                Pair("\"Multigrain\" or \"Wheat\"", "Doesn't mean whole grain. Most multigrain products are made from refined flour, stripped of nutrients, with a few whole grains thrown in for show."),
+                                Pair("Hidden Sugar", "Sugar has over 60 different names on ingredient lists — corn syrup, dextrose, maltose, fructose, cane juice... Companies use multiple names so no single one appears first."),
+                            )
+
+                            tricks.forEach { (title, desc) ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(colors.card)
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Warning,
+                                            contentDescription = null,
+                                            tint = Color(0xFFF59E0B),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = title,
+                                            color = Color(0xFFF59E0B),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                    Text(
+                                        text = desc,
+                                        color = colors.textSecondary,
+                                        fontSize = 14.sp,
+                                        lineHeight = 22.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "HealthHeat cuts through all of this — automatically, every scan. 🔍",
+                                color = colors.accentGreen,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                lineHeight = 24.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    // ═══════════════════════════════════════════════════════
+                    // PAGE 3 — PROFILE FORM
+                    // ═══════════════════════════════════════════════════════
+                    2 -> {
+                        Column(modifier = Modifier.padding(24.dp)) {
+                            Text(
+                                text = "Tell us about yourself",
+                                color = colors.textPrimary,
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Every detail helps us give you scans that actually mean something for your life. Skip anything you prefer.",
+                                color = colors.textSecondary,
+                                fontSize = 15.sp,
+                                lineHeight = 22.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(28.dp))
+
+                            OutlinedTextField(
+                                value = preferredName,
+                                onValueChange = { preferredName = it },
+                                label = { Text("Your name") },
+                                placeholder = { Text("What should we call you?") },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.accentGreen,
+                                    unfocusedBorderColor = colors.border,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary,
+                                    cursorColor = colors.accentGreen
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            OutlinedTextField(
+                                value = age,
+                                onValueChange = { age = it },
+                                label = { Text("Age") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.accentGreen,
+                                    unfocusedBorderColor = colors.border,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary,
+                                    cursorColor = colors.accentGreen
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                OutlinedTextField(
+                                    value = height,
+                                    onValueChange = { height = it },
+                                    label = { Text("Height (cm)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = colors.accentGreen,
+                                        unfocusedBorderColor = colors.border,
+                                        focusedTextColor = colors.textPrimary,
+                                        unfocusedTextColor = colors.textPrimary,
+                                        cursorColor = colors.accentGreen
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                OutlinedTextField(
+                                    value = weight,
+                                    onValueChange = { weight = it },
+                                    label = { Text("Weight (kg)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = colors.accentGreen,
+                                        unfocusedBorderColor = colors.border,
+                                        focusedTextColor = colors.textPrimary,
+                                        unfocusedTextColor = colors.textPrimary,
+                                        cursorColor = colors.accentGreen
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            OutlinedTextField(
+                                value = allergies,
+                                onValueChange = { allergies = it },
+                                label = { Text("Allergies (e.g. Peanuts, Dairy)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.accentGreen,
+                                    unfocusedBorderColor = colors.border,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary,
+                                    cursorColor = colors.accentGreen
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            OutlinedTextField(
+                                value = healthGoals,
+                                onValueChange = { healthGoals = it },
+                                label = { Text("Health Goals & Conditions") },
+                                placeholder = { Text("e.g. Weight loss, Diabetic") },
+                                modifier = Modifier.fillMaxWidth().height(120.dp),
+                                maxLines = 4,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.accentGreen,
+                                    unfocusedBorderColor = colors.border,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary,
+                                    cursorColor = colors.accentGreen
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(48.dp))
+
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        isSaving = true
+                                        try {
+                                            val profileData = mutableMapOf<String, Any>()
+                                            if (preferredName.isNotBlank()) profileData["preferred_name"] = preferredName
+                                            if (age.isNotBlank()) profileData["age"] = age.toIntOrNull() ?: 0
+                                            if (height.isNotBlank()) profileData["height"] = height.toDoubleOrNull() ?: 0.0
+                                            if (weight.isNotBlank()) profileData["weight_kg"] = weight.toDoubleOrNull() ?: 0.0
+                                            if (allergies.isNotBlank()) {
+                                                profileData["allergies"] = allergies.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                                            }
+                                            if (healthGoals.isNotBlank()) profileData["health_goals"] = healthGoals
+
+                                            RetrofitClient.apiService.updateProfile(profileData)
+                                            authViewModel.fetchProfile()
+                                            onFinish()
+                                        } catch (e: Exception) {
+                                            // Ignore for now
+                                        } finally {
+                                            isSaving = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen),
+                                enabled = !isSaving
+                            ) {
+                                if (isSaving) {
+                                    CircularProgressIndicator(color = colors.background, modifier = Modifier.size(24.dp))
+                                } else {
+                                    Text("Save & Continue", color = colors.background, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // ── Bottom Nav (Next / Back) ──────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .navigationBarsPadding(),
+                horizontalArrangement = if (currentStep > 0) Arrangement.SpaceBetween else Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (currentStep > 0) {
+                    OutlinedButton(
+                        onClick = { currentStep-- },
+                        shape = RoundedCornerShape(12.dp),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            width = 1.dp
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary)
+                    ) {
+                        Text("← Back")
+                    }
+                }
+
+                // Only show Next on pages 0 and 1
+                if (currentStep < totalSteps - 1) {
+                    Button(
+                        onClick = { currentStep++ },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen)
+                    ) {
+                        Text("Next →", color = colors.background, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }
