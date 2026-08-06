@@ -106,7 +106,7 @@ interface ApiService {
     suspend fun getProfile(): UserProfileResponse
 
     @PUT("/api/profile")
-    suspend fun updateProfile(@Body profileData: Map<String, Any>): Map<String, String>
+    suspend fun updateProfile(@Body profileData: Map<String, @JvmSuppressWildcards Any>): Map<String, String>
 
     @POST("/api/auth/google")
     suspend fun googleAuth(@Body tokenData: TokenData): AuthResponse
