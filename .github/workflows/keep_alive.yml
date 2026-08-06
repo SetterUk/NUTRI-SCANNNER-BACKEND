@@ -1,0 +1,23 @@
+name: Keep Render Alive
+
+on:
+  schedule:
+    # Runs every 10 minutes, 24/7
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  ping:
+    name: Ping Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render API
+        run: |
+          echo "Pinging Render backend to prevent cold start..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://nutri-scanner-api.onrender.com/api/ping)
+          echo "Response code: $response"
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Server is alive!"
+          else
+            echo "⚠️ Server returned status $response"
+          fi
