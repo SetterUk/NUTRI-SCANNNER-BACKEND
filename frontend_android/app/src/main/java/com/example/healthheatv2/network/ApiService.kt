@@ -96,9 +96,8 @@ interface ApiService {
 
 // 3. Create the Retrofit Singleton
 object RetrofitClient {
-    // For physical device testing, use the computer's local IP address
-    private const val BASE_URL = "http://10.50.156.69:8000/"
-    // private const val BASE_URL = "https://nutri-scanner-api.onrender.com/"
+    // For physical device testing over the internet, use the production backend
+    private const val BASE_URL = "https://nutri-scanner-api.onrender.com/"
     
     var authToken: String? = null
 

@@ -1,0 +1,191 @@
+\documentclass[letterpaper,10pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\addtolength{\oddsidemargin}{-0.6in}
+\addtolength{\evensidemargin}{-0.6in}
+\addtolength{\textwidth}{1.2in}
+\addtolength{\topmargin}{-0.7in}
+\addtolength{\textheight}{1.2in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+\pdfgentounicode=1
+
+\newcommand{\resumeItem}[1]{
+  \item\small{{#1 \vspace{-2pt}}}
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-1pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-4pt}
+}
+
+\newcommand{\resumeSubSubheading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \textit{\small#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-4pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-4pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}[itemsep=0pt, parsep=0pt]}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-3pt}}
+
+\begin{document}
+
+%----------HEADING----------
+\begin{center}
+    \textbf{\Huge \scshape Koushik Upadhyay} \\ \vspace{1pt}
+    \small +91-6376936152 $|$ \href{mailto:Koushik4067@gmail.com}{\underline{Koushik4067@gmail.com}} $|$
+    \href{https://www.linkedin.com/in/koushik-upadhyay-95565932b/}{\underline{linkedin.com/in/koushik-upadhyay}} $|$
+    \href{https://github.com/SetterUk}{\underline{github.com/SetterUk}}
+\end{center}
+
+%-----------SUMMARY-----------
+\section{Summary}
+  \vspace{2pt}
+  \small{Final-year CSE (AIML) student with 3 internships deploying agentic AI systems using LangGraph and LangChain. Seeking to apply rapid prototyping skills to post-sales AI transformation at Zycus, translating operational business pain points into scalable technical solutions.}
+  \vspace{-5pt}
+
+%-----------EDUCATION-----------
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {Shri Ramdeobaba College of Engineering and Management}{Nagpur, MH}
+      {Bachelor of Technology in CSE (AIML) -- CGPA: 8.35}{Present}
+    \resumeSubheading
+      {Modern School}{Dungarpur, Raj}
+      {Class XII (Senior Secondary) with 91.4\%}{2022}
+    \resumeSubSubheading
+      {Class X (Secondary) with 90.6\%}{2020}
+  \resumeSubHeadingListEnd
+
+%-----------EXPERIENCE-----------
+\section{Experience}
+  \resumeSubHeadingListStart
+
+    \resumeSubheading
+      {Software Developer Intern (AI/ML) $|$ \textmd{\textit{FastAPI, Next.js, PostgreSQL}}}{Mar 2026 -- Present}
+      {Abhikalpan Construction Solutions $|$ \href{https://app.abhikalpan.co.in/}{\textcolor{blue}{\underline{https://app.abhikalpan.co.in}}}}{Pune, MH}
+      \resumeItemListStart
+        \resumeItem{Developed a \textbf{Full-Stack Asset Management Platform} to digitize component tracking for framework units, reducing data retrieval time from several minutes to sub-second latency and eliminating manual transcription errors.}
+        \resumeItem{Architected a \textbf{concurrency-safe workflow} implementing robust row-level locking mechanisms to manage multi-supervisor data entry, ensuring 100\% data integrity across the production-to-client-handover pipeline.}
+        \resumeItem{Engineered a mobile-first UI with \textbf{QR-driven palleting} and real-time cascading filters, establishing a fully digital audit trail and removing the need for physical paperwork in field operations.}
+      \resumeItemListEnd
+
+    \resumeSubheading
+      {Machine Learning Intern $|$ \textmd{\textit{LangChain, LangGraph, Python, APIs}}}{Aug 2025 -- Jan 2026}
+      {Vruksh Ecosystem Foundation $|$ \href{https://iris-two-roan.vercel.app/}{\textcolor{blue}{\underline{https://iris-two-roan.vercel.app}}}}{Remote / Hybrid}
+      \resumeItemListStart
+        \resumeItem{Led the \textbf{rapid prototyping and experimentation} of \textbf{IRIS}, an intelligent AI discovery platform, using a BioBERT semantic pipeline to taxonomize 5,000+ abstracts with 20\% higher search precision.}
+        \resumeItem{Orchestrated an \textbf{Agentic AI workflow automation} using \textbf{LangGraph and APIs} to dynamically profile professionals, mapping process inefficiencies and reducing manual data entry effort by 60\%.}
+        \resumeItem{Collaborated with stakeholders to pilot an interactive AI dashboard, collecting user feedback to iterate on features, validate use cases, and track usage metrics.}
+      \resumeItemListEnd
+
+    \resumeSubheading
+      {Freelance Python Developer $|$ \textmd{\textit{Django}}}{Feb 2025 -- Jul 2025}
+      {Salasar Farm $|$ \href{https://smgolden.in/buy-agricultural-land-in-maharashtra/}{\textcolor{blue}{\underline{https://smgolden.in}}}}{Remote}
+      \resumeItemListStart
+        \resumeItem{Delivered a dedicated support ticketing module for end-customers, directly addressing operational pain points and streamlining issue resolution and reporting.}
+        \resumeItem{Optimized registration workflows and integrated AJAX-powered referral search with pagination.}
+        \resumeItem{Revamped global navigation and frontend templates, boosting user experience and interface responsiveness.}
+      \resumeItemListEnd
+
+  \resumeSubHeadingListEnd
+
+%-----------PROJECTS-----------
+\section{Projects}
+    \resumeSubHeadingListStart
+      \resumeProjectHeading
+          {\textbf{NutriScanner (Health Heat App)} $|$ \emph{Python, FastAPI, LangGraph, LLaMA-3, Groq}}{}
+          \resumeItemListStart
+            \resumeItem{Rapidly prototyped an \textbf{Agentic AI workflow} using \textbf{LangGraph} and FastAPI to orchestrate multi-agent interactions (intent routing, nutritional analysis, and response synthesis) for real-time product scans.}
+            \resumeItem{Engineered a hybrid AI pipeline pairing a deterministic scoring engine with LLaMA-3 (via Groq) and curated \textbf{prompt libraries} to generate structured, hallucination-free clinical explanations in JSON.}
+          \resumeItemListEnd
+
+      \resumeProjectHeading
+          {\textbf{ComfyUI AI Video Generation} $|$ \emph{ComfyUI, Generative AI, A10 GPU}}{}
+          \resumeItemListStart
+            \resumeItem{Engineered ComfyUI workflows on an A10 GPU, optimizing node configurations for high-fidelity, temporally coherent AI video generation.}
+          \resumeItemListEnd
+
+      \resumeProjectHeading
+          {\textbf{Advanced RAG Architectures} $|$ \emph{LLaMA, LangChain, Pinecone, HuggingFace, Python}}{}
+          \resumeItemListStart
+            \resumeItem{Engineered an \textbf{Agentic RAG system} (Llama-3, Pinecone) with a hybrid retrieval pipeline (dense/sparse + RRF) and multi-modal ingestion (OCR, OpenCV) for precise reasoning over educational data.}
+            \resumeItem{Applied advanced \textbf{prompt engineering} to design a Self-Reflection evaluation loop, utilizing BERTScore to grade LLM outputs on faithfulness and consistency, virtually eliminating hallucinations.}
+          \resumeItemListEnd
+
+      \resumeProjectHeading
+          {\textbf{DC Weather Bot} $|$ \emph{Python, NLP, Real-Time APIs, Text-to-Speech}}{}
+          \resumeItemListStart
+            \resumeItem{Engineered an interactive bot integrating real-time weather APIs to fetch and process live meteorological data.}
+            \resumeItem{Leveraged NLP to accurately parse user queries and generate context-aware forecast text.}
+            \resumeItem{Implemented Text-to-Speech (TTS) to vocalize dynamic reports using interactive personas, enhancing engagement.}
+          \resumeItemListEnd
+    \resumeSubHeadingListEnd
+
+%-----------CERTIFICATIONS-----------
+\section{Certifications}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+        \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}l}
+          \textbullet\ \href{https://www.credly.com/badges/9c7f25ce-54d9-4044-9cb72ab492acaede/public_url}{\textbf{AWS Cloud Foundations}} & \textbullet\ \href{https://drive.google.com/file/d/1wsOWBC26fBlTj4LEPlCYH5hKjUJiC5qc/view?usp=sharing}{\textbf{AICTE Internship}} \\
+          \textbullet\ \href{https://www.credly.com/badges/fb627a87-7770-4837-89bae2af199bc4b7/public_url}{\textbf{AWS Data Engineering}} & \textbullet\ \href{https://drive.google.com/file/d/13tMzaVK_2KUXbqpAYA25jlgVlsuofKX/view?usp=sharing}{\textbf{AIML Virtual Internship}} \\
+          \textbullet\ \href{https://drive.google.com/file/d/1DdDtAQtHz7L36DxckhvOqIoRvFV61v1D/view?usp=sharing}{\textbf{NPTEL Certification (IIT/Swayam)}} & \\
+        \end{tabular*}
+    }}
+ \end{itemize}
+
+%-----------TECHNICAL SKILLS-----------
+\section{Technical Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+     \textbf{Python}, C++, SQL, HTML/CSS, \textbf{JSON} \\
+     \textbf{AI \& ML}{: RAG, Agentic AI, LLaMA, Prompt Engineering, NLP, Deep Learning, Classical ML Algorithms} \\
+     \textbf{Frameworks \& Libraries}{: FastAPI, Django, LangChain, LangGraph, LlamaIndex, Pandas, NumPy, BERTScore} \\
+     \textbf{Cloud \& Tools}{: AWS, Git/GitHub, Pinecone, HuggingFace, \textbf{OpenAI APIs}, ComfyUI}
+    }}
+ \end{itemize}
+
+\end{document}

@@ -54,7 +54,7 @@ fun AuthScreen(
             coroutineScope.launch {
                 try {
                     viewModel.setLoading()
-                    val webClientId = "106908032906-h890o1rbd0k8d3bneqavhre92i45sfmd.apps.googleusercontent.com"
+                    val webClientId = "637255913649-a4i4r1bqd74319livs80vos9ico5mcm3.apps.googleusercontent.com"
                     val credentialManager = CredentialManager.create(context)
                     
                     // For explicit button clicks, GetSignInWithGoogleOption is required
@@ -76,8 +76,7 @@ fun AuthScreen(
                     }
                 } catch (e: Exception) {
                     Log.e("Auth", "Sign In Failed", e)
-                    // Simplify the error message for users
-                    viewModel.setError("Sign in failed. Make sure you have a Google account on this device.")
+                    viewModel.setError("Error: ${e.message}")
                 }
             }
         }
