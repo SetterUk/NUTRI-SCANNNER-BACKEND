@@ -80,7 +80,7 @@ fun OnboardingScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "We built HealthHeat because we believe everyone deserves to know what they put in their body — not just athletes or nutrition experts, but every person, every family.\n\nYour health is personal. That's why we ask a few simple questions — so our AI can speak to *you*, not just scan a barcode. Every scan becomes a moment of clarity tailored to your life.\n\nFill in what you can. Skip what you prefer. We're here whenever you're ready. 💚",
+                    text = "Every day, millions of people pick up a product without truly knowing what's inside it. We built HealthHeat to change that — not just for athletes or nutritionists, but for every person, every family.\n\nYour health is personal. Tell us a little about yourself, and we'll give you answers that actually speak to you. 💚",
                     color = colors.textSecondary,
                     fontSize = 15.sp,
                     lineHeight = 24.sp
