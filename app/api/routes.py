@@ -130,7 +130,7 @@ async def google_auth(data: TokenData, session: AsyncSession = Depends(get_sessi
 async def scan_product(
     barcode: str,
     session: AsyncSession = Depends(get_session),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     print(f"DEBUG: Received scan request for {barcode}")
     # Fetch user profile for personalization if user is authenticated
@@ -214,6 +214,9 @@ async def scan_product(
         "scoring_result": None,
         # PERSONALIZATION CONTEXT
         "user_profile": {
+            "age": profile.age if profile else None,
+            "weight_kg": profile.weight_kg if profile else None,
+            "height": profile.height if profile else None,
             "dietary_preferences": profile.dietary_preferences if profile else None,
             "health_tags": profile.health_tags if profile else [],
             "allergies": profile.allergies if profile else [],
@@ -263,6 +266,39 @@ async def scan_product(
     
     return response_data
 
+@router.get("/scan/history", response_model=List[ProductResponse])
+async def get_scan_history(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get the user's scan history, ordered by most recent first.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Fetch the latest 50 distinct scans for the user
+    # Note: A real app might group by barcode or distinct, but this is simple history
+    statement = (
+        select(Product)
+        .join(UserScan, UserScan.barcode == Product.barcode)
+        .where(UserScan.user_id == current_user.id)
+        .order_by(UserScan.scanned_at.desc())
+        .limit(50)
+    )
+    result = await session.execute(statement)
+    products = result.scalars().all()
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_products = []
+    for p in products:
+        if p.barcode not in seen:
+            seen.add(p.barcode)
+            unique_products.append(p)
+
+    return unique_products
+
 @router.post("/report-missing")
 async def report_missing_product(
     data: ReportMissingRequest,
@@ -281,6 +317,48 @@ async def report_missing_product(
     session.add(new_log)
     await session.commit()
     return {"status": "success", "message": "Product reported successfully"}
+
+@router.patch("/scan/{barcode}/contribute")
+async def contribute_to_product(
+    barcode: str,
+    data: ContributeProductRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows a user to contribute missing name and ingredients.
+    This wipes the old AI cache so it can be re-analyzed next time.
+    """
+    statement = select(Product).where(Product.barcode == barcode)
+    result = await session.execute(statement)
+    product = result.scalars().first()
+
+    if not product:
+        # If it truly doesn't exist, create a skeleton product
+        product = Product(
+            barcode=barcode,
+            name=data.name,
+            ingredients_text=data.ingredients_text,
+            ingredients=[i.strip() for i in data.ingredients_text.split(",")],
+            source="MANUAL"
+        )
+        session.add(product)
+    else:
+        # Update existing
+        product.name = data.name
+        product.ingredients_text = data.ingredients_text
+        product.ingredients = [i.strip() for i in data.ingredients_text.split(",")]
+        
+        # Invalidate AI Cache!
+        product.health_score = None
+        product.verdict = None
+        product.summary = None
+        product.ingredients_analysis = []
+        product.nutrition_analysis = {}
+        session.add(product)
+
+    await session.commit()
+    return {"status": "success", "message": "Product contributed successfully"}
 
 @router.get("/history", response_model=List[ProductResponse])
 async def get_user_history(

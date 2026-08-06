@@ -19,12 +19,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.healthheatv2.R
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -32,7 +33,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.example.healthheatv2.data.ProductCacheEntity
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.ui.components.UserProfileAvatar
@@ -55,15 +58,23 @@ fun SearchHubScreen(
     onManualEntryClick: () -> Unit,
     onViewAllHistoryClick: () -> Unit,
     onProductSelected: () -> Unit,
-    onLogout: () -> Unit
+    onProfileClick: () -> Unit,
+    onLogout: () -> Unit,
 ) {
     val colors = LocalAppColors.current
     val history by viewModel.searchHistory
     val isDark by themeViewModel.isDark
 
-    val avgScore = if (history.isNotEmpty()) history.take(10).mapNotNull { it.foodResponse.healthScore }.average().toInt() else 0
-    val smashCount = history.count { it.foodResponse.verdict?.uppercase() == "SMASH" }
-    val passCount = history.count { it.foodResponse.verdict?.uppercase() == "PASS" }
+    val avgScore = if (history.isNotEmpty()) {
+        history.asSequence()
+            .take(10)
+            .mapNotNull { it.foodResponse.healthScore }
+            .average()
+            .toInt()
+    } else 0
+    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
+    val smashCount = history.count { (it.foodResponse.healthScore ?: 0) >= smashThreshold }
+    val passCount = history.count { (it.foodResponse.healthScore ?: 0) < smashThreshold }
     val latestItem = history.firstOrNull()
 
     Box(
@@ -83,6 +94,7 @@ fun SearchHubScreen(
                 authViewModel = authViewModel,
                 isDark = isDark,
                 onThemeToggle = { themeViewModel.toggleTheme() },
+                onProfileClick = onProfileClick,
                 onLogout = onLogout
             )
         }
@@ -160,6 +172,7 @@ private fun HomeTopBar(
     authViewModel: AuthViewModel,
     isDark: Boolean,
     onThemeToggle: () -> Unit,
+    onProfileClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -173,10 +186,17 @@ private fun HomeTopBar(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
-                modifier = Modifier.size(36.dp).background(colors.accentGreen, CircleShape),
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Eco, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.app_logo),
+                    contentDescription = "App Logo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             Text("HealthHeat", color = colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
         }
@@ -196,7 +216,7 @@ private fun HomeTopBar(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            UserProfileAvatar(viewModel = authViewModel, onLogout = onLogout)
+            UserProfileAvatar(viewModel = authViewModel, onProfileClick = onProfileClick, onLogout = onLogout)
         }
     }
 }
@@ -207,7 +227,7 @@ private fun HomeTopBar(
 @Composable
 private fun GreetingSection() {
     val colors = LocalAppColors.current
-    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
     val greeting = when {
         hour < 12 -> "Good Morning"
         hour < 17 -> "Good Afternoon"
@@ -257,7 +277,7 @@ private fun FeaturedScanCard(onScanClick: () -> Unit, onManualClick: () -> Unit)
         // Main Scan Button
         var pressed by remember { mutableStateOf(false) }
         val btnScale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(stiffness = Spring.StiffnessMediumLow))
-        LaunchedEffect(pressed) { if (pressed) { delay(150); pressed = false } }
+        LaunchedEffect(pressed) { if (pressed) { delay(150L); pressed = false } }
 
         Box(
             modifier = Modifier
@@ -382,9 +402,10 @@ private fun SectionRow(title: String, action: String?, onActionClick: () -> Unit
 private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
     val colors = LocalAppColors.current
     val product = item.foodResponse
-    val isSmash = product.verdict?.uppercase() == "SMASH"
-    val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
     val score = product.healthScore ?: 0
+    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
+    val isSmash = score >= smashThreshold
+    val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
     val nutriScore = product.nutriScore?.uppercase() ?: "?"
     val nutriColor = nutriScoreColor(nutriScore, colors)
 
@@ -406,21 +427,25 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
                     .background(verdictColor.copy(0.1f)),
                 contentAlignment = Alignment.Center
             ) {
-                if (!product.imageUrl.isNullOrEmpty()) {
-                    AsyncImage(
-                        model = product.imageUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Text(
-                        text = product.name?.take(1)?.uppercase() ?: "?",
-                        color = verdictColor,
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(product.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    error = {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Text(
+                                text = product.name?.take(1)?.uppercase() ?: "?",
+                                color = verdictColor,
+                                fontSize = 36.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                )
             }
 
             // Details
@@ -505,84 +530,6 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────
-//  Compact Scan Card (horizontal scroll)
-// ─────────────────────────────────────────────────
-@Composable
-private fun CompactScanCard(item: ProductCacheEntity, index: Int, onClick: () -> Unit) {
-    val colors = LocalAppColors.current
-    val product = item.foodResponse
-    val isSmash = product.verdict?.uppercase() == "SMASH"
-    val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
-    val score = product.healthScore ?: 0
-
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(index * 60L); visible = true }
-    val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(300))
-
-    Column(
-        modifier = Modifier
-            .width(120.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(colors.card)
-            .border(1.dp, colors.border, RoundedCornerShape(18.dp))
-            .clickable { onClick() },
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Image
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .background(verdictColor.copy(0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (!product.imageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Text(product.name?.take(1)?.uppercase() ?: "?", color = verdictColor, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-            }
-            // Score badge top-right
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .clip(CircleShape)
-                    .background(verdictColor)
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
-            ) {
-                Text("$score", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
-            }
-        }
-
-        Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Text(
-                product.name ?: "Unknown",
-                color = colors.textPrimary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                lineHeight = 14.sp,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                product.brand ?: "",
-                color = colors.textSecondary,
-                fontSize = 10.sp,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────
 //  Health Tips Strip
 // ─────────────────────────────────────────────────
 private val healthTips = listOf(
@@ -661,6 +608,8 @@ fun nutriScoreColor(score: String, colors: com.example.healthheatv2.ui.theme.App
         "C" -> colors.accentAmber
         "D" -> Color(0xFFCA6F1E)
         "E" -> colors.accentRed
+        "N/A" -> colors.textSecondary
+        "?" -> colors.textSecondary
         else -> colors.textSecondary
     }
 }

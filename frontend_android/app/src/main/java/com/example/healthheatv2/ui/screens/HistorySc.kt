@@ -28,7 +28,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import com.example.healthheatv2.R
 import com.example.healthheatv2.data.ProductCacheEntity
 import com.example.healthheatv2.ui.components.UserProfileAvatar
 import com.example.healthheatv2.ui.theme.LocalAppColors
@@ -46,6 +50,7 @@ fun HistoryScreen(
     themeViewModel: ThemeViewModel,
     onBackClick: () -> Unit,
     onProductSelected: () -> Unit,
+    onProfileClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -57,11 +62,12 @@ fun HistoryScreen(
 
     val filters = listOf("All", "SMASH", "PASS", "Today")
 
-    val filteredHistory = remember(searchQuery, activeFilter, history) {
+    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
+    val filteredHistory = remember(searchQuery, activeFilter, history, smashThreshold) {
         var list = history
         // Filter by verdict
-        if (activeFilter == "SMASH") list = list.filter { it.foodResponse.verdict?.uppercase() == "SMASH" }
-        else if (activeFilter == "PASS") list = list.filter { it.foodResponse.verdict?.uppercase() == "PASS" }
+        if (activeFilter == "SMASH") list = list.filter { (it.foodResponse.healthScore ?: 0) >= smashThreshold }
+        else if (activeFilter == "PASS") list = list.filter { (it.foodResponse.healthScore ?: 0) < smashThreshold }
         else if (activeFilter == "Today") {
             val todayStart = System.currentTimeMillis() - 86_400_000L
             list = list.filter { it.scannedAt >= todayStart }
@@ -88,6 +94,7 @@ fun HistoryScreen(
                 authViewModel = authViewModel,
                 isDark = isDark,
                 onThemeToggle = { themeViewModel.toggleTheme() },
+                onProfileClick = onProfileClick,
                 onLogout = onLogout
             )
         }
@@ -236,6 +243,7 @@ private fun HistoryTopBar(
     authViewModel: AuthViewModel,
     isDark: Boolean,
     onThemeToggle: () -> Unit,
+    onProfileClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -277,7 +285,7 @@ private fun HistoryTopBar(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            UserProfileAvatar(viewModel = authViewModel, onLogout = onLogout)
+            UserProfileAvatar(viewModel = authViewModel, onProfileClick = onProfileClick, onLogout = onLogout)
         }
     }
 }
@@ -293,11 +301,12 @@ private fun HistoryItemCard(
 ) {
     val colors = LocalAppColors.current
     val product = item.foodResponse
-    val isSmash = product.verdict?.uppercase() == "SMASH"
+    val score = product.healthScore ?: 0
+    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
+    val isSmash = score >= smashThreshold
     val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
     val nutriScore = product.nutriScore?.uppercase() ?: "?"
     val nutriColor = nutriScoreColor(nutriScore, colors)
-    val score = product.healthScore ?: 0
 
     // Stagger animation
     var visible by remember { mutableStateOf(false) }
@@ -341,21 +350,25 @@ private fun HistoryItemCard(
                 .background(verdictColor.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
-            if (!product.imageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Text(
-                    text = product.name?.take(1)?.uppercase() ?: "?",
-                    color = verdictColor,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(product.imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                error = {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = product.name?.take(1)?.uppercase() ?: "?",
+                            color = verdictColor,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            )
         }
 
         // Main info

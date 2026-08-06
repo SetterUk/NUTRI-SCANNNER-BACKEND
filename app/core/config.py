@@ -5,12 +5,20 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Nutri Scanner"
     VERSION: str = "1.0.0"
     DATABASE_URL: str
-    GROQ_API_KEY: str = ""
+    GROQ_API_KEYS: str = ""
+    
+    @property
+    def groq_api_keys_list(self) -> list[str]:
+        if not self.GROQ_API_KEYS:
+            return []
+        return [k.strip() for k in self.GROQ_API_KEYS.split(",") if k.strip()]
     SECRET_KEY: str = "supersecretfallbackkeyfornutriscannerapi"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # Google Auth Configuration
     GOOGLE_CLIENT_ID: str = ""
+
+    SENTRY_DSN: str = ""
 
     model_config = SettingsConfigDict(env_file=".env")
 

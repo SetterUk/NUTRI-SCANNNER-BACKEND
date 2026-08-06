@@ -12,15 +12,13 @@ It does NOT output any numeric scores.
 import json
 import logging
 import time
-from groq import AsyncGroq
 from app.core.config import settings
+from app.core.groq_manager import groq_manager
 from app.models.schemas import AIAnalysisResult
 from app.services.scoring import ScoringResult
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
 
 async def analyze_product_detailed(
@@ -29,6 +27,7 @@ async def analyze_product_detailed(
     ingredients_list: list,
     nutrients: dict,
     scoring: ScoringResult,
+    user_profile: dict = None,
 ) -> AIAnalysisResult:
     """
     Call the LLM to generate text explanations for a pre-computed ScoringResult.
@@ -62,7 +61,12 @@ LOCKED SCORES (do not alter):
 - is_good_for_health: {str(scoring.is_good_for_health).lower()}
 - safe_consumption_frequency: "{scoring.safe_consumption_frequency}"
 - data_confidence: {confidence_label}
+- alcohol_capped: {str(scoring.alcohol_capped).lower()}
 - category_group: "{scoring.category_group}"
+
+USER DIETARY PROFILE (CRITICAL CONTEXT):
+{json.dumps(user_profile, indent=2) if user_profile else "No specific dietary preferences set. Provide general health advice."}
+If the user has dietary preferences (e.g., Vegan, Keto) or health tags (e.g., Diabetic), you MUST explicitly address how this product aligns or conflicts with their specific profile in the `health_reason` and `summary`.
 
 SCORE BREAKDOWN (what drove the score):
 Pillar scores:
@@ -89,11 +93,13 @@ YOUR TASKS:
 2. Write `summary`: 2 sentences. First: what the product is and its dominant nutritional characteristic.
    Second: practical takeaway for the consumer based on "{scoring.safe_consumption_frequency}".
 
-3. Write `ingredients_analysis`: For EACH ingredient in the structured list, output:
-   - name: ingredient name (clean, human-readable)
-   - quantity: exact value from nutritional facts if available, else "Not specified"
-   - status: "Good", "Bad", or "Neutral" — must align with the deductions/bonuses above
-   - reason: 1 sentence scientific explanation referencing actual quantities where possible
+3. Write `ingredients_analysis`: 
+   - CRITICAL RULE: If the "Ingredients text" or "Structured ingredients" is empty, DO NOT GUESS OR HALLUCINATE INGREDIENTS. Output an empty list `[]` for `ingredients_analysis` and explicitly mention the missing data in the `health_reason` and `summary`.
+   - If ingredients exist, for EACH ingredient in the structured list, output:
+     - name: ingredient name (clean, human-readable)
+     - quantity: exact value from nutritional facts if available, else "Not specified"
+     - status: "Good", "Bad", or "Neutral" — must align with the deductions/bonuses above
+     - reason: 1 sentence scientific explanation referencing actual quantities where possible
 
 4. Write `nutrition_analysis`:
    - energy_estimation: How much energy this product provides. Use exact kcal from nutritional facts.
@@ -125,24 +131,40 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema:
         logger.debug(f"Groq API Prompt:\n{prompt}")
         
         start_time = time.time()
-        chat_completion = await client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a clinical nutritionist AI. You explain pre-computed nutrition scores "
-                        "in plain, accurate language. You only output valid JSON. "
-                        "You never recompute or override the locked numeric scores provided to you."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            model="llama-3.3-70b-versatile",
-            response_format={"type": "json_object"},
-        )
+        
+        MAX_RETRIES = 3
+        chat_completion = None
+        for attempt in range(MAX_RETRIES):
+            client = groq_manager.get_best_client()
+            try:
+                chat_completion = await client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a clinical nutritionist AI. You explain pre-computed nutrition scores "
+                                "in plain, accurate language. You only output valid JSON. "
+                                "You never recompute or override the locked numeric scores provided to you."
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt,
+                        }
+                    ],
+                    model="llama-3.3-70b-versatile",
+                    response_format={"type": "json_object"},
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) or "rate limit" in str(e).lower():
+                    logger.warning(f"Nutritionist Agent: Groq rate limited on attempt {attempt+1}. Switching keys...")
+                    groq_manager.mark_rate_limited(client, retry_after_seconds=60.0)
+                    if attempt == MAX_RETRIES - 1:
+                        raise e
+                else:
+                    raise e
+        
         duration = time.time() - start_time
 
         response_text = chat_completion.choices[0].message.content

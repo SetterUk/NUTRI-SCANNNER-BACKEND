@@ -60,6 +60,7 @@ private val ErrorBg = Color(0xFF93000A).copy(alpha = 0.25f)
 @Composable
 fun UserProfileAvatar(
     viewModel: AuthViewModel,
+    onProfileClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val user = viewModel.getCurrentUser()
@@ -117,6 +118,10 @@ fun UserProfileAvatar(
                         displayName = user?.displayName,
                         email = user?.email,
                         photoUrl = user?.photoUrl?.toString(),
+                        onProfileClick = {
+                            showPopup = false
+                            onProfileClick()
+                        },
                         onLogout = {
                             showPopup = false
                             viewModel.signOut()
@@ -135,6 +140,7 @@ private fun ProfilePopupCard(
     displayName: String?,
     email: String?,
     photoUrl: String?,
+    onProfileClick: () -> Unit,
     onLogout: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -204,6 +210,38 @@ private fun ProfilePopupCard(
             HorizontalDivider(color = OutlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Profile Settings button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SurfaceContainerHighest, RoundedCornerShape(12.dp))
+                    .border(1.dp, OutlineVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .clickable { onProfileClick() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = "Profile Settings",
+                        tint = OnSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Dietary Profile",
+                        color = OnSurfaceVariant,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Logout button
             Box(

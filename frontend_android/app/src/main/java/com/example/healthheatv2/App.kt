@@ -54,6 +54,8 @@ sealed class Screen(val route: String) {
     object Product : Screen("product")
     object History : Screen("history")
     object DetailedNutrition : Screen("detailed_nutrition")
+    object Profile : Screen("profile")
+    object Onboarding : Screen("onboarding")
 }
 
 data class BottomNavItem(
@@ -113,7 +115,7 @@ fun App(modifier: Modifier = Modifier) {
         ) {
             NavHost(
                 navController = navController,
-                startDestination = Screen.SearchHub.route,
+                startDestination = if (authViewModel.getCurrentUser() != null) Screen.SearchHub.route else Screen.Auth.route,
                 modifier = modifier.fillMaxSize()
             ) {
                 composable(Screen.Auth.route) {
@@ -121,8 +123,19 @@ fun App(modifier: Modifier = Modifier) {
                         viewModel = authViewModel,
                         themeViewModel = themeViewModel,
                         onAuthSuccess = {
-                            navController.navigate(Screen.SearchHub.route) {
+                            navController.navigate(Screen.Onboarding.route) {
                                 popUpTo(Screen.Auth.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+
+                composable(Screen.Onboarding.route) {
+                    OnboardingScreen(
+                        authViewModel = authViewModel,
+                        onFinish = {
+                            navController.navigate(Screen.SearchHub.route) {
+                                popUpTo(Screen.Onboarding.route) { inclusive = true }
                             }
                         }
                     )
@@ -143,6 +156,7 @@ fun App(modifier: Modifier = Modifier) {
                         },
                         onViewAllHistoryClick = { navController.navigate(Screen.History.route) },
                         onProductSelected = { navController.navigate(Screen.Product.route) },
+                        onProfileClick = { navController.navigate(Screen.Profile.route) },
                         onLogout = {
                             navController.navigate(Screen.Auth.route) {
                                 popUpTo(0) { inclusive = true }
@@ -177,18 +191,12 @@ fun App(modifier: Modifier = Modifier) {
                 composable(Screen.Product.route) {
                     ProductScreen(
                         viewModel = scannerViewModel,
-                        authViewModel = authViewModel,
                         onScanAnother = {
                             scannerViewModel.resetState()
                             navController.popBackStack(Screen.SearchHub.route, inclusive = false)
                         },
                         onViewDetails = {
                             navController.navigate(Screen.DetailedNutrition.route)
-                        },
-                        onLogout = {
-                            navController.navigate(Screen.Auth.route) {
-                                popUpTo(0) { inclusive = true }
-                            }
                         }
                     )
                 }
@@ -202,6 +210,9 @@ fun App(modifier: Modifier = Modifier) {
                         onProductSelected = {
                             navController.navigate(Screen.Product.route)
                         },
+                        onProfileClick = {
+                            navController.navigate(Screen.Profile.route)
+                        },
                         onLogout = {
                             navController.navigate(Screen.Auth.route) {
                                 popUpTo(0) { inclusive = true }
@@ -213,6 +224,13 @@ fun App(modifier: Modifier = Modifier) {
                 composable(Screen.DetailedNutrition.route) {
                     DetailedNutritionScreen(
                         viewModel = scannerViewModel,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.Profile.route) {
+                    ProfileScreen(
+                        authViewModel = authViewModel,
                         onBackClick = { navController.popBackStack() }
                     )
                 }

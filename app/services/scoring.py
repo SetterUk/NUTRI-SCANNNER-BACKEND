@@ -828,6 +828,15 @@ def compute_health_score(
             "points": "cap"
         })
 
+    # Missing ingredients penalty
+    if not ingredients_text:
+        raw = min(raw, 75.0)
+        all_deductions.insert(0, {
+            "reason": "Missing ingredient data — score penalized and capped at 75",
+            "points": -10.0
+        })
+        raw = max(0.0, raw - 10.0)
+
     health_score = int(max(0.0, min(100.0, raw)))
 
     confidence = _compute_confidence(

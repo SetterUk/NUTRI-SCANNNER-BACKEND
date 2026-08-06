@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.FlashOff
-import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,7 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,7 +51,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 @Composable
 fun BarcodeScannerScreen(
     viewModel: ScannerViewModel,
-    onScanSuccess: () -> Unit
+    onScanSuccess: () -> Unit,
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
@@ -62,11 +60,11 @@ fun BarcodeScannerScreen(
             CameraPreviewWithOverlay(viewModel = viewModel, onScanSuccess = onScanSuccess)
         }
         cameraPermissionState.status.shouldShowRationale -> {
-            PermissionRationaleScreen(onRequestPermission = { cameraPermissionState.launchPermissionRequest() })
+            PermissionRationaleScreen { cameraPermissionState.launchPermissionRequest() }
         }
         else -> {
             LaunchedEffect(Unit) { cameraPermissionState.launchPermissionRequest() }
-            PermissionRequestScreen(onRequestPermission = { cameraPermissionState.launchPermissionRequest() })
+            PermissionRequestScreen { cameraPermissionState.launchPermissionRequest() }
         }
     }
 }
@@ -74,7 +72,7 @@ fun BarcodeScannerScreen(
 @Composable
 private fun CameraPreviewWithOverlay(
     viewModel: ScannerViewModel,
-    onScanSuccess: () -> Unit
+    onScanSuccess: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -85,7 +83,7 @@ private fun CameraPreviewWithOverlay(
     var lastDetectedBarcode by remember { mutableStateOf("") }
 
     LaunchedEffect(apiState) {
-        if (apiState is ApiState.Success) onScanSuccess()
+        if (apiState is ApiState.Success || apiState is ApiState.Error) onScanSuccess()
     }
 
     val cameraController = remember {
@@ -100,7 +98,7 @@ private fun CameraPreviewWithOverlay(
                         val barcodes = result.getValue(barcodeScanner)
                         if (!barcodes.isNullOrEmpty()) {
                             val rawValue = barcodes.first().rawValue
-                            if (rawValue != null && rawValue != lastDetectedBarcode) {
+                            if ((rawValue != null) && (rawValue != lastDetectedBarcode)) {
                                 lastDetectedBarcode = rawValue
                                 viewModel.lookupBarcode(rawValue)
                             }
@@ -134,7 +132,7 @@ private fun CameraPreviewWithOverlay(
                 .clickable { viewModel.resetState() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(20.dp))
         }
 
         // Top center: title
@@ -277,11 +275,10 @@ private fun ScannerOverlay(isScanning: Boolean) {
         // Corner bracket accents
         val cornerLen = 60f
         val strokeW = 10f
-        val cornerColor = accentGreen
 
         // Top-left
         drawArc(
-            color = cornerColor,
+            color = accentGreen,
             startAngle = 180f, sweepAngle = 90f, useCenter = false,
             topLeft = Offset(boxLeft, boxTop),
             size = Size(cornerLen, cornerLen),
@@ -289,25 +286,25 @@ private fun ScannerOverlay(isScanning: Boolean) {
         )
         // Top-right
         drawArc(
-            color = cornerColor,
+            color = accentGreen,
             startAngle = 270f, sweepAngle = 90f, useCenter = false,
-            topLeft = Offset(boxLeft + boxW - cornerLen, boxTop),
+            topLeft = Offset((boxLeft + boxW) - cornerLen, boxTop),
             size = Size(cornerLen, cornerLen),
             style = Stroke(width = strokeW, cap = StrokeCap.Round)
         )
         // Bottom-left
         drawArc(
-            color = cornerColor,
+            color = accentGreen,
             startAngle = 90f, sweepAngle = 90f, useCenter = false,
-            topLeft = Offset(boxLeft, boxTop + boxH - cornerLen),
+            topLeft = Offset(boxLeft, (boxTop + boxH) - cornerLen),
             size = Size(cornerLen, cornerLen),
             style = Stroke(width = strokeW, cap = StrokeCap.Round)
         )
         // Bottom-right
         drawArc(
-            color = cornerColor,
+            color = accentGreen,
             startAngle = 0f, sweepAngle = 90f, useCenter = false,
-            topLeft = Offset(boxLeft + boxW - cornerLen, boxTop + boxH - cornerLen),
+            topLeft = Offset((boxLeft + boxW) - cornerLen, (boxTop + boxH) - cornerLen),
             size = Size(cornerLen, cornerLen),
             style = Stroke(width = strokeW, cap = StrokeCap.Round)
         )
@@ -406,11 +403,5 @@ private fun PermissionRequestScreen(onRequestPermission: () -> Unit) {
 @Composable
 private fun PermissionRationaleScreen(onRequestPermission: () -> Unit) {
     PermissionRequestScreen(onRequestPermission = onRequestPermission)
-}
-
-// Keep for compatibility — old ErrorCard ref
-@Composable
-fun ErrorCard(errorMessage: String, onDismiss: () -> Unit) {
-    ScanErrorCard(message = errorMessage, onDismiss = onDismiss)
 }
 

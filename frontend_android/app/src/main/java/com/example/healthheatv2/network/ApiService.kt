@@ -38,6 +38,21 @@ data class AuthResponse(
     @SerializedName("access_token") val accessToken: String,
     @SerializedName("token_type") val tokenType: String
 )
+data class ContributeRequest(
+    @SerializedName("name") val name: String,
+    @SerializedName("ingredients_text") val ingredientsText: String
+)
+data class UserProfileResponse(
+    val age: Int?,
+    @SerializedName("weight_kg") val weightKg: Double?,
+    val height: Double?,
+    val gender: String?,
+    @SerializedName("activity_level") val activityLevel: String?,
+    @SerializedName("dietary_preferences") val dietaryPreferences: String?,
+    @SerializedName("health_goals") val healthGoals: String?,
+    val allergies: List<String>? = emptyList(),
+    @SerializedName("health_tags") val healthTags: List<String>? = emptyList()
+)
 data class FoodResponse(
     @SerializedName("verdict") val verdict: String?,
     @SerializedName("health_score") val healthScore: Int?,
@@ -84,14 +99,23 @@ interface ApiService {
         @Query("user_profile") userProfile: String = "General Health" // Optional, matches your default
     ): FoodResponse
 
-    @GET("/api/history")
+    @GET("/api/scan/history")
     suspend fun getHistory(): List<FoodResponse>
+
+    @GET("/api/profile")
+    suspend fun getProfile(): UserProfileResponse
 
     @PUT("/api/profile")
     suspend fun updateProfile(@Body profileData: Map<String, Any>): Map<String, String>
 
     @POST("/api/auth/google")
     suspend fun googleAuth(@Body tokenData: TokenData): AuthResponse
+
+    @retrofit2.http.PATCH("/api/scan/{barcode}/contribute")
+    suspend fun contributeProduct(
+        @Path("barcode") barcode: String,
+        @Body data: ContributeRequest
+    )
 }
 
 // 3. Create the Retrofit Singleton

@@ -8,10 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -19,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
@@ -31,7 +30,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import androidx.compose.ui.res.painterResource
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import com.example.healthheatv2.R
+import kotlinx.coroutines.delay
 import com.example.healthheatv2.network.AlternativeProduct
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.network.IngredientAnalysis
@@ -41,21 +45,27 @@ import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.ApiState
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
 import com.example.healthheatv2.ui.viewmodel.ScannerViewModel
-
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 @Composable
 fun ProductScreen(
     viewModel: ScannerViewModel,
-    authViewModel: AuthViewModel,
     onScanAnother: () -> Unit,
     onViewDetails: () -> Unit,
-    onLogout: () -> Unit
 ) {
     val apiState by viewModel.apiState
     val colors = LocalAppColors.current
 
-    if (apiState is ApiState.Success) {
-        val product = (apiState as ApiState.Success).data
-        val isSmash = product.verdict?.uppercase() == "SMASH"
+    when (val state = apiState) {
+        is ApiState.Success -> {
+            val product = state.data
+        val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
+        val score = product.healthScore ?: 0
+        val isSmash = score >= smashThreshold
         val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
 
         val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -63,7 +73,7 @@ fun ProductScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(colors.background)
+                .background(colors.background),
         ) {
             // ── Dynamic Background ────────────
             AnimatedAmbientBackground(verdictColor = verdictColor)
@@ -75,29 +85,42 @@ fun ProductScreen(
             ) {
                 // ── Hero ──────────────────────────
                 item {
-                    ProductHero(product = product, verdictColor = verdictColor, onScanAnother = onScanAnother, scrollState = scrollState)
+                    ProductHero(
+                        product = product,
+                        verdictColor = verdictColor,
+                        onScanAnother = onScanAnother,
+                        scrollState = scrollState
+                    ) { newName, newIngredients ->
+                        viewModel.contribute(viewModel.lastScannedBarcode, newName, newIngredients)
+                    }
                 }
 
                 // ── Verdict + Score row ───────────
+                val isNonFood = (product.healthScore == 0) && (product.isGoodForHealth == false) && (product.safeConsumptionFrequency == "Not applicable")
+                
                 item {
                     Spacer(Modifier.height(20.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        VerdictCard(
-                            modifier = Modifier.weight(1.1f),
-                            product = product,
-                            verdictColor = verdictColor,
-                            isSmash = isSmash
-                        )
-                        ScoreGauge(
-                            modifier = Modifier.weight(0.9f),
-                            score = product.healthScore ?: 0,
-                            onClick = onViewDetails
-                        )
+                    if (isNonFood) {
+                        NonFoodCard(modifier = Modifier.padding(horizontal = 20.dp))
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            VerdictCard(
+                                modifier = Modifier.weight(1.1f),
+                                product = product,
+                                verdictColor = verdictColor,
+                                isSmash = isSmash
+                            )
+                            ScoreGauge(
+                                modifier = Modifier.weight(0.9f),
+                                score = product.healthScore ?: 0,
+                                onClick = onViewDetails
+                            )
+                        }
                     }
                 }
 
@@ -120,42 +143,71 @@ fun ProductScreen(
                         Spacer(Modifier.height(24.dp))
                         SectionTitle("AI Analysis", padding = 20.dp)
                         Spacer(Modifier.height(12.dp))
-                        AISummaryCard(
-                            summary = summary,
-                            safeFrequency = product.safeConsumptionFrequency,
-                            healthReason = product.healthReason
-                        )
+                        AISummaryCard(summary = summary)
                     }
                 }
 
                 // ── Ingredient Forensics ──────────
                 val ingredients = product.ingredientsAnalysis ?: emptyList()
-                if (ingredients.isNotEmpty()) {
-                    item {
-                        Spacer(Modifier.height(24.dp))
-                        SectionTitle("Ingredient Analysis", padding = 20.dp)
-                        Spacer(Modifier.height(4.dp))
+                item {
+                    Spacer(Modifier.height(24.dp))
+                    SectionTitle("Ingredient Analysis", padding = 20.dp)
+                    Spacer(Modifier.height(4.dp))
+                    
+                    if (product.ingredientsText.isNullOrEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.accentAmber.copy(alpha = 0.1f))
+                                .border(1.dp, colors.accentAmber.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                .padding(16.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Icon(Icons.Filled.WarningAmber, contentDescription = "Warning", tint = colors.accentAmber)
+                                Text("Incomplete Data: Ingredients are missing from the global database. Score confidence is reduced.", color = colors.accentAmber, fontSize = 14.sp, lineHeight = 20.sp)
+                            }
+                        }
+                    } else if (ingredients.isNotEmpty()) {
                         Text(
                             "${ingredients.count { it.status?.uppercase() == "GOOD" }} good · " +
-                            "${ingredients.count { it.status?.uppercase() == "BAD" }} concerning · " +
-                            "${ingredients.count { it.status?.uppercase() == "NEUTRAL" }} neutral",
+                            "${ingredients.count { it.status?.uppercase() == "NEUTRAL" }} neutral · " +
+                            "${ingredients.count { it.status?.uppercase() == "BAD" }} bad",
                             color = colors.textSecondary,
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
                             modifier = Modifier.padding(horizontal = 20.dp)
                         )
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    itemsIndexed(ingredients) { index, ingredient ->
-                        IngredientRow(ingredient = ingredient, index = index)
-                        if (index < ingredients.lastIndex) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp)
-                                    .height(1.dp)
-                                    .background(colors.border)
-                            )
+                        Spacer(Modifier.height(16.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(colors.card)
+                        ) {
+                            ingredients.forEachIndexed { index, ingredient ->
+                                IngredientRow(ingredient = ingredient, index = index)
+                                if (index < ingredients.lastIndex) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp)
+                                            .height(1.dp)
+                                            .background(colors.border)
+                                    )
+                                }
+                            }
                         }
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "No ingredient analysis available.",
+                            color = colors.textSecondary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
                     }
                 }
 
@@ -240,10 +292,209 @@ fun ProductScreen(
                 }
             }
         }
-    } else {
+    }
+    is ApiState.Error -> {
+        ProductNotFoundScreen(
+            errorMessage = state.message,
+            onScanAnother = onScanAnother,
+            onContribute = { name, ingredients ->
+                viewModel.contribute(viewModel.lastScannedBarcode, name, ingredients)
+            }
+        )
+    }
+    else -> {
         Box(Modifier.fillMaxSize().background(colors.background), contentAlignment = Alignment.Center) {
-            Text("No product data.", color = colors.textSecondary)
+            androidx.compose.material3.CircularProgressIndicator(color = colors.accentBlue)
         }
+    }
+}
+}
+
+@Composable
+private fun ProductNotFoundScreen(
+    errorMessage: String, 
+    onScanAnother: () -> Unit,
+    onContribute: (String, String) -> Unit
+) {
+    val colors = LocalAppColors.current
+    
+    // State for OCR and Contribution Dialog
+    var showDialog by remember { mutableStateOf(false) }
+    var ocrText by remember { mutableStateOf("") }
+    var productName by remember { mutableStateOf("") }
+    var isProcessing by remember { mutableStateOf(false) }
+
+    // ML Kit Text Recognition Launcher
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            isProcessing = true
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    val text = visionText.text
+                    // Clean up newlines to commas
+                    ocrText = text.replace("\n", ", ")
+                    isProcessing = false
+                    showDialog = true
+                }
+                .addOnFailureListener {
+                    isProcessing = false
+                    showDialog = true // Show anyway so they can type manually
+                }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Broken barcode graphic
+            Icon(
+                imageVector = Icons.Filled.QrCodeScanner,
+                contentDescription = "Not Found",
+                modifier = Modifier.size(80.dp),
+                tint = colors.textSecondary.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(
+                text = "Product Not Found",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(
+                text = if (errorMessage.contains("404")) "This item isn't in our global database yet." else errorMessage,
+                fontSize = 15.sp,
+                color = colors.textSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 22.sp
+            )
+            
+            Spacer(modifier = Modifier.height(40.dp))
+            
+            // "Take a Picture Instead" / Contribute CTA
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(if (isProcessing) colors.card else colors.accentBlue)
+                    .clickable(enabled = !isProcessing) { cameraLauncher.launch(null) },
+                contentAlignment = Alignment.Center
+            ) {
+                if (isProcessing) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = colors.accentBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = colors.background, modifier = Modifier.size(20.dp))
+                        Text("Take a Photo of Ingredients", color = colors.background, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Scan Another
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .border(2.dp, colors.border, RoundedCornerShape(28.dp))
+                    .clickable { onScanAnother() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Scan Another Barcode", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        }
+    }
+
+    // Contribution Dialog
+    if (showDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor = colors.card,
+            title = {
+                Text(
+                    "Contribute to Database",
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        "Please verify the extracted ingredients and provide a product name.",
+                        color = colors.textSecondary,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = productName,
+                        onValueChange = { productName = it },
+                        label = { Text("Product Name", color = colors.textHint) },
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary,
+                            focusedBorderColor = colors.accentBlue,
+                            unfocusedBorderColor = colors.border
+                        ),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = ocrText,
+                        onValueChange = { ocrText = it },
+                        label = { Text("Ingredients (comma separated)", color = colors.textHint) },
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary,
+                            focusedBorderColor = colors.accentBlue,
+                            unfocusedBorderColor = colors.border
+                        ),
+                        minLines = 4,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        if (productName.isNotBlank() && ocrText.isNotBlank()) {
+                            onContribute(productName, ocrText)
+                            showDialog = false
+                        }
+                    }
+                ) {
+                    Text("Submit to Database", color = colors.accentBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDialog = false }) {
+                    Text("Cancel", color = colors.textSecondary)
+                }
+            }
+        )
     }
 }
 
@@ -251,12 +502,22 @@ fun ProductScreen(
 //  Hero Section
 // ─────────────────────────────────────────────────
 @Composable
-private fun ProductHero(product: FoodResponse, verdictColor: Color, onScanAnother: () -> Unit, scrollState: LazyListState) {
+private fun ProductHero(
+    product: FoodResponse,
+    verdictColor: Color,
+    onScanAnother: () -> Unit,
+    scrollState: LazyListState,
+    onContribute: (String, String) -> Unit
+) {
     val colors = LocalAppColors.current
 
     // Parallax calculation
-    val scrollOffset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 0
-    val parallaxOffset = scrollOffset * 0.5f
+    val parallaxOffset by remember {
+        derivedStateOf {
+            val scrollOffset = if (scrollState.firstVisibleItemIndex == 0) scrollState.firstVisibleItemScrollOffset else 0
+            scrollOffset * 0.5f
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -264,27 +525,36 @@ private fun ProductHero(product: FoodResponse, verdictColor: Color, onScanAnothe
             .height(280.dp)
     ) {
         // Background: image or coloured gradient
-        if (!product.imageUrl.isNullOrEmpty()) {
-            AsyncImage(
-                model = product.imageUrl,
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(product.imageUrl)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = "Product",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { translationY = parallaxOffset }
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { translationY = parallaxOffset }
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(verdictColor.copy(alpha = 0.3f), colors.background)
+                    .graphicsLayer { translationY = parallaxOffset },
+                error = {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(verdictColor.copy(alpha = 0.3f), colors.background)
+                                )
+                            )
+                    ) {
+                        Text(
+                            text = product.name?.take(1)?.uppercase() ?: "?",
+                            color = verdictColor.copy(alpha = 0.5f),
+                            fontSize = 80.sp,
+                            fontWeight = FontWeight.ExtraBold
                         )
-                    )
+                    }
+                }
             )
-        }
 
         // Dark gradient overlay at bottom
         Box(
@@ -310,7 +580,7 @@ private fun ProductHero(product: FoodResponse, verdictColor: Color, onScanAnothe
                 .clickable { onScanAnother() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary, modifier = Modifier.size(20.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary, modifier = Modifier.size(20.dp))
         }
 
         // Product name at bottom
@@ -329,15 +599,117 @@ private fun ProductHero(product: FoodResponse, verdictColor: Color, onScanAnothe
                 )
                 Spacer(Modifier.height(4.dp))
             }
-            Text(
-                text = product.name ?: "Unknown Product",
-                color = if (colors.isDark) Color.White else colors.textPrimary,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.ExtraBold,
-                lineHeight = 30.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            var showRenameDialog by remember { mutableStateOf(false) }
+            var isProcessing by remember { mutableStateOf(false) }
+            var ocrText by remember { mutableStateOf("") }
+            var newName by remember { mutableStateOf(if (product.name == "Unknown Product") "" else product.name ?: "") }
+
+            val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
+                if (bitmap != null) {
+                    isProcessing = true
+                    val image = InputImage.fromBitmap(bitmap, 0)
+                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                    recognizer.process(image)
+                        .addOnSuccessListener { visionText ->
+                            ocrText = visionText.text.replace("\n", ", ")
+                            isProcessing = false
+                            showRenameDialog = true
+                        }
+                        .addOnFailureListener {
+                            isProcessing = false
+                            showRenameDialog = true
+                        }
+                } else {
+                    showRenameDialog = true
+                }
+            }
+
+            val isUnknown = (product.name.isNullOrEmpty()) || (product.name == "Unknown Product")
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = product.name ?: "Unidentified Item",
+                    color = if (colors.isDark) Color.White else colors.textPrimary,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = 30.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                
+                if (isUnknown) {
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(colors.accentBlue.copy(alpha = 0.2f))
+                            .clickable { cameraLauncher.launch(null) }, // Launch camera instead of just opening dialog!
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isProcessing) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                color = colors.accentBlue,
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Filled.CameraAlt, contentDescription = "Contribute", tint = colors.accentBlue, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            if (showRenameDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showRenameDialog = false },
+                    title = { Text("Contribute to Database") },
+                    text = {
+                        Column {
+                            Text(
+                                "Please verify the extracted ingredients and provide a product name.",
+                                color = colors.textSecondary,
+                                fontSize = 14.sp
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            androidx.compose.material3.OutlinedTextField(
+                                value = newName,
+                                onValueChange = { newName = it },
+                                label = { Text("Product Name", color = colors.textHint) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            androidx.compose.material3.OutlinedTextField(
+                                value = ocrText,
+                                onValueChange = { ocrText = it },
+                                label = { Text("Ingredients (comma separated)", color = colors.textHint) },
+                                minLines = 4,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                if (newName.isNotBlank() && ocrText.isNotBlank()) {
+                                    onContribute(newName, ocrText)
+                                    showRenameDialog = false
+                                }
+                            }
+                        ) { Text("Save to Database", color = colors.accentBlue) }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { showRenameDialog = false }) {
+                            Text("Cancel", color = colors.textSecondary)
+                        }
+                    },
+                    containerColor = colors.card,
+                    titleContentColor = colors.textPrimary,
+                    textContentColor = colors.textPrimary
+                )
+            }
             if (!product.quantity.isNullOrEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -459,7 +831,7 @@ private fun ScoreGauge(modifier: Modifier, score: Int, onClick: () -> Unit) {
                 .aspectRatio(1f),
             contentAlignment = Alignment.Center
         ) {
-            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
                 val strokeWidth = 18f
                 drawArc(
                     color = colors.card.copy(alpha = 0f),
@@ -516,7 +888,7 @@ private fun OfficialRatingsRow(nutriScore: String?, novaGroup: Int?, ecoScore: S
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            val nutriGrade = nutriScore?.uppercase() ?: "?"
+            val nutriGrade = nutriScore?.uppercase()?.takeIf { it.isNotBlank() && it != "?" } ?: "N/A"
             val nutriColor = nutriScoreColor(nutriGrade, colors)
             GradeCard(
                 modifier = Modifier.weight(1f),
@@ -572,7 +944,7 @@ private fun OfficialRatingsRow(nutriScore: String?, novaGroup: Int?, ecoScore: S
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = novaGroup?.toString() ?: "?",
+                    text = novaGroup?.toString() ?: "N/A",
                     color = novaColor,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold
@@ -607,7 +979,7 @@ private fun GradeCard(modifier: Modifier, label: String, grade: String, descript
                 .border(1.dp, color.copy(0.3f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(grade, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+            Text(grade, color = Color.White, fontSize = if (grade.length > 1) 16.sp else 24.sp, fontWeight = FontWeight.ExtraBold)
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(label, color = colors.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
@@ -716,10 +1088,8 @@ private fun NutrientLevelsCard(nutrientLevels: Map<String, String>) {
 //  AI Summary Card
 // ─────────────────────────────────────────────────
 @Composable
-private fun AISummaryCard(summary: String, safeFrequency: String?, healthReason: String?) {
+private fun AISummaryCard(summary: String) {
     val colors = LocalAppColors.current
-
-    
 
     Column(
         modifier = Modifier
@@ -759,9 +1129,9 @@ private fun IngredientRow(ingredient: IngredientAnalysis, index: Int) {
     var expanded by remember { mutableStateOf(false) }
 
     // Stagger animation
-    var visible by remember { mutableStateOf(false) }
+    var visible by remember { mutableStateOf(value = false) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(index * 40L)
+        delay(index * 40L)
         visible = true
     }
 
@@ -846,7 +1216,7 @@ private fun IngredientRow(ingredient: IngredientAnalysis, index: Int) {
 @Composable
 private fun AlternativeCard(alt: AlternativeProduct) {
     val colors = LocalAppColors.current
-    val nutriColor = nutriScoreColor(alt.nutriScore?.uppercase() ?: "?", colors)
+    val scoreColor = nutriScoreColor(alt.nutriScore?.uppercase() ?: "?", colors)
 
     Column(
         modifier = Modifier
@@ -863,34 +1233,38 @@ private fun AlternativeCard(alt: AlternativeProduct) {
                 .fillMaxWidth()
                 .height(80.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(nutriColor.copy(alpha = 0.15f)),
+                .background(scoreColor.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
-            if (!alt.imageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = alt.imageUrl,
-                    contentDescription = alt.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Text(
-                    text = (alt.name?.firstOrNull() ?: "?").toString().uppercase(),
-                    color = nutriColor,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(alt.imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = alt.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                error = {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = if (!alt.name.isNullOrEmpty()) alt.name[0].toString().uppercase() else "?",
+                            color = scoreColor,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            )
         }
         Text(alt.name ?: "Product", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, lineHeight = 16.sp)
         Text(alt.brand ?: "", color = colors.textSecondary, fontSize = 11.sp, maxLines = 1)
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .background(nutriColor.copy(alpha = 0.12f))
+                .background(scoreColor.copy(alpha = 0.12f))
                 .padding(horizontal = 6.dp, vertical = 2.dp)
         ) {
-            Text("${alt.nutriScore?.uppercase() ?: "?"}", color = nutriColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+            Text(alt.nutriScore?.uppercase() ?: "?", color = scoreColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -942,7 +1316,7 @@ private fun AnimatedAmbientBackground(verdictColor: Color) {
     val colors = LocalAppColors.current
     val isDark = colors.isDark
     
-    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
 
@@ -963,5 +1337,43 @@ private fun AnimatedAmbientBackground(verdictColor: Color) {
                 radius = width * 1.0f
             )
         )
+    }
+}
+@Composable
+private fun NonFoodCard(modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.card)
+            .padding(24.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Block,
+                contentDescription = "Not Food",
+                tint = colors.textSecondary.copy(alpha = 0.5f),
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Not a Food Item",
+                color = colors.textPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "This item is not a food or beverage and cannot be nutritionally evaluated.",
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 18.sp
+            )
+        }
     }
 }

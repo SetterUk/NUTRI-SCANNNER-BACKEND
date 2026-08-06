@@ -12,6 +12,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.example.healthheatv2.ui.theme.HealthHeatv2Theme
 
 import com.google.firebase.FirebaseApp
+import com.example.healthheatv2.data.RemoteConfigManager
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,6 +21,7 @@ class MainActivity : ComponentActivity() {
         
         try {
             FirebaseApp.initializeApp(this)
+            RemoteConfigManager.fetchAndActivate()
         } catch (e: Exception) {
             // Ignore if already initialized or if config is missing (will be handled by the UI/ViewModel later if needed)
         }

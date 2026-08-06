@@ -25,7 +25,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
+import com.example.healthheatv2.R
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.ApiState
@@ -83,6 +87,62 @@ fun DetailedNutritionScreen(
             }
         }
 
+        // ── Prominent Calorie Section ─────────────────
+        val nutrients = product.nutrients
+        val calories = nutrients?.get("energy-kcal_100g")?.toString()?.toDoubleOrNull()
+            ?: nutrients?.get("energy-kcal_value")?.toString()?.toDoubleOrNull()
+        
+        if (calories != null) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(colors.card)
+                        .border(1.dp, colors.accentAmber.copy(0.4f), RoundedCornerShape(20.dp))
+                        .padding(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("CALORIES", color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    text = calories.toInt().toString(),
+                                    color = colors.accentAmber,
+                                    fontSize = 36.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = (-1).sp
+                                )
+                                Text(
+                                    text = " kcal / 100g",
+                                    color = colors.textSecondary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(colors.accentAmberSubtle),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.LocalFireDepartment, contentDescription = "Calories", tint = colors.accentAmber, modifier = Modifier.size(28.dp))
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Safety First: Allergens & Additives ──
         val hasAllergens = !product.allergens.isNullOrBlank()
         val hasAdditives = !product.additivesTags.isNullOrEmpty()
@@ -123,7 +183,6 @@ fun DetailedNutritionScreen(
         }
 
         // ── Macro Bar Chart ───────────────────────
-        val nutrients = product.nutrients
         if (!nutrients.isNullOrEmpty()) {
             item {
                 Spacer(Modifier.height(24.dp))
@@ -236,19 +295,25 @@ private fun AltItemCard(alt: com.example.healthheatv2.network.AlternativeProduct
                 .background(nutriColor.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
-            if (!alt.imageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = alt.imageUrl,
-                    contentDescription = alt.name,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Text(
-                    text = alt.name?.take(1)?.uppercase() ?: "?",
-                    color = nutriColor, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold
-                )
-            }
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(alt.imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = alt.name,
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+                error = {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = alt.name?.take(1)?.uppercase() ?: "?",
+                            color = nutriColor, 
+                            fontSize = 24.sp, 
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            )
         }
         Text(alt.name ?: "Product", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, lineHeight = 16.sp)
         Text(alt.brand ?: "", color = colors.textSecondary, fontSize = 11.sp, maxLines = 1)

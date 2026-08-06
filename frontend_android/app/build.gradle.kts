@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     id("kotlin-kapt")
 }
 
@@ -43,10 +44,11 @@ android {
 
 dependencies {
     // Room Database
-    val roomVersion = "2.6.1"
+    val roomVersion = "2.7.0-alpha13"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion") // For Coroutines support
     kapt("androidx.room:room-compiler:$roomVersion")
+    
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -83,5 +85,9 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-config")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("io.sentry:sentry-android:7.14.0")
 }

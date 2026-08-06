@@ -29,4 +29,7 @@ interface ProductDao {
     // Optional cleanup: Delete anything beyond the top 100 recent scans
     @Query("DELETE FROM scanned_products WHERE barcode NOT IN (SELECT barcode FROM scanned_products ORDER BY scannedAt DESC LIMIT 100)")
     suspend fun cleanupOldEntries()
+
+    @Query("DELETE FROM scanned_products WHERE barcode = :barcode")
+    suspend fun deleteProduct(barcode: String)
 }

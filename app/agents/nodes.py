@@ -1,6 +1,6 @@
 import json
 import logging
-from groq import AsyncGroq
+from app.core.groq_manager import groq_manager
 from app.agents.state import AgentState
 from app.agents.nutritionist import analyze_product_detailed
 from app.services.scoring import compute_health_score
@@ -8,7 +8,6 @@ from app.core.config import settings
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
-_groq = AsyncGroq(api_key=settings.GROQ_API_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -62,21 +61,35 @@ Return ONLY this JSON with no explanation:
 {{"is_food": true}} or {{"is_food": false}}"""
 
     try:
-        response = await _groq.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a strict product classifier. Output only valid JSON. No explanation."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            model="llama-3.3-70b-versatile",
-            response_format={"type": "json_object"},
-            temperature=0,  # deterministic — classification must be consistent
-        )
+        MAX_RETRIES = 3
+        response = None
+        for attempt in range(MAX_RETRIES):
+            client = groq_manager.get_best_client()
+            try:
+                response = await client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a strict product classifier. Output only valid JSON. No explanation."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    model="llama-3.3-70b-versatile",
+                    response_format={"type": "json_object"},
+                    temperature=0,  # deterministic — classification must be consistent
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) or "rate limit" in str(e).lower():
+                    logger.warning(f"Intent Agent: Groq rate limited on attempt {attempt+1}. Switching keys...")
+                    groq_manager.mark_rate_limited(client, retry_after_seconds=60.0)
+                    if attempt == MAX_RETRIES - 1:
+                        raise e
+                else:
+                    raise e
 
         result = json.loads(response.choices[0].message.content)
         is_food = bool(result.get("is_food", True))
@@ -159,6 +172,7 @@ async def nutritionist_agent(state: AgentState) -> Dict[str, Any]:
         ingredients_list=state.get("ingredients", []),
         nutrients=state.get("nutrients", {}),
         scoring=scoring,
+        user_profile=state.get("user_profile")
     )
 
     return {

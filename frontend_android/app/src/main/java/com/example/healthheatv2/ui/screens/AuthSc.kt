@@ -11,12 +11,16 @@ import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import com.example.healthheatv2.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -131,16 +135,17 @@ fun AuthScreenContent(
             // Logo
             Box(
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(colors.accentGreen),
+                    .size(100.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(2.dp, colors.accentGreen.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                    .background(colors.card),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Filled.Eco,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(42.dp)
+                Image(
+                    painter = painterResource(id = R.drawable.app_logo),
+                    contentDescription = "App Logo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 

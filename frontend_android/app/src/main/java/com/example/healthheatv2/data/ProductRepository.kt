@@ -37,6 +37,22 @@ class ProductRepository(
         return networkResponse
     }
 
+    suspend fun contributeToDatabase(barcode: String, newName: String, newIngredients: String) {
+        // Send to backend
+        try {
+            apiService.contributeProduct(
+                barcode, 
+                com.example.healthheatv2.network.ContributeRequest(newName, newIngredients)
+            )
+        } catch (e: Exception) {
+            Log.e("REPOSITORY", "Failed to contribute to backend", e)
+            throw e // rethrow to be caught by ViewModel
+        }
+
+        // Wipe local cache so it fetches fresh AI analysis next time!
+        productDao.deleteProduct(barcode)
+    }
+
     // Fetches the entire scan history for the History Screen
     suspend fun getSearchHistory(): List<ProductCacheEntity> {
         return try {

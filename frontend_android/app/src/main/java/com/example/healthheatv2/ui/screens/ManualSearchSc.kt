@@ -40,7 +40,7 @@ fun ManualSearchScreen(
     var validationError by remember { mutableStateOf("") }
 
     LaunchedEffect(apiState) {
-        if (apiState is ApiState.Success) onSearchSuccess()
+        if (apiState is ApiState.Success || apiState is ApiState.Error) onSearchSuccess()
     }
 
     Column(
@@ -206,31 +206,7 @@ fun ManualSearchScreen(
                 }
             }
 
-            // Error state
-            if (apiState is ApiState.Error) {
-                Spacer(Modifier.height(20.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(colors.accentRedSubtle)
-                        .border(1.dp, colors.accentRed.copy(0.3f), RoundedCornerShape(14.dp))
-                        .padding(14.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Filled.Warning, contentDescription = null, tint = colors.accentRed, modifier = Modifier.size(16.dp))
-                            Text("Not Found", color = colors.accentRed, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                        Text(
-                            text = (apiState as ApiState.Error).message,
-                            color = colors.textSecondary,
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp
-                        )
-                    }
-                }
-            }
+            // Removed inline error state because it navigates to ProductScreen now
 
             Spacer(Modifier.height(32.dp))
 

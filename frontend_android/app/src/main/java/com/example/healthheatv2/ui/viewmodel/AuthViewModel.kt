@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import com.example.healthheatv2.network.RetrofitClient
 import com.example.healthheatv2.network.TokenData
+import com.example.healthheatv2.network.UserProfileResponse
 
 
 sealed class AuthState {
@@ -30,10 +31,27 @@ class AuthViewModel : ViewModel() {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
+    private val _userProfile = MutableStateFlow<UserProfileResponse?>(null)
+    val userProfile: StateFlow<UserProfileResponse?> = _userProfile.asStateFlow()
+
     init {
-        // Automatically skip login if they are already authenticated
-        if (auth?.currentUser != null) {
+        val user = auth?.currentUser
+        if (user != null) {
             _authState.value = AuthState.Success
+            // Restore backend token silently in background
+            viewModelScope.launch {
+                try {
+                    val idTokenResult = user.getIdToken(false).await()
+                    val idToken = idTokenResult.token
+                    if (idToken != null) {
+                        val backendResponse = RetrofitClient.apiService.googleAuth(TokenData(idToken))
+                        RetrofitClient.authToken = backendResponse.accessToken
+                        fetchProfile()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("Auth", "Failed to restore token", e)
+                }
+            }
         }
     }
 
@@ -49,6 +67,7 @@ class AuthViewModel : ViewModel() {
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
                 auth?.signInWithCredential(credential)?.await()
                 
+                fetchProfile()
                 _authState.value = AuthState.Success
             } catch (e: Exception) {
                 android.util.Log.e("Firebase_Auth_Error", "Detailed error:", e)
@@ -72,7 +91,18 @@ class AuthViewModel : ViewModel() {
 
     fun signOut() {
         auth?.signOut()
+        _userProfile.value = null
         _authState.value = AuthState.Idle
+    }
+
+    fun fetchProfile() {
+        viewModelScope.launch {
+            try {
+                _userProfile.value = RetrofitClient.apiService.getProfile()
+            } catch (e: Exception) {
+                android.util.Log.e("AuthViewModel", "Failed to fetch profile", e)
+            }
+        }
     }
 
     fun getCurrentUser() = auth?.currentUser

@@ -25,6 +25,8 @@ class ScannerViewModel(private val repository: ProductRepository) : ViewModel() 
     private val _searchHistory = mutableStateOf<List<ProductCacheEntity>>(emptyList())
     val searchHistory: State<List<ProductCacheEntity>> = _searchHistory
 
+    var lastScannedBarcode: String = ""
+
     init {
         refreshHistory()
     }
@@ -37,6 +39,7 @@ class ScannerViewModel(private val repository: ProductRepository) : ViewModel() 
     }
 
     fun lookupBarcode(barcode: String) {
+        lastScannedBarcode = barcode
         _apiState.value = ApiState.Loading
         viewModelScope.launch {
             try {
@@ -48,6 +51,10 @@ class ScannerViewModel(private val repository: ProductRepository) : ViewModel() 
                 // 3. Refresh the history list so the new scan appears on the History screen
                 refreshHistory()
 
+            } catch (e: retrofit2.HttpException) {
+                val msg = if (e.code() == 404) "404 Product Not Found" else "Network Error (${e.code()})"
+                _apiState.value = ApiState.Error(msg)
+                Log.e("API_CALL", "HTTP Error fetching data", e)
             } catch (e: Exception) {
                 _apiState.value = ApiState.Error(e.message ?: "Unknown error occurred")
                 Log.e("API_CALL", "Error fetching data", e)
@@ -57,6 +64,19 @@ class ScannerViewModel(private val repository: ProductRepository) : ViewModel() 
 
     fun loadFromHistory(cachedProduct: FoodResponse) {
         _apiState.value = ApiState.Success(cachedProduct)
+    }
+
+    fun contribute(barcode: String, newName: String, newIngredients: String) {
+        _apiState.value = ApiState.Loading
+        viewModelScope.launch {
+            try {
+                repository.contributeToDatabase(barcode, newName, newIngredients)
+                // Re-fetch product to get the new AI analysis and updated data!
+                lookupBarcode(barcode)
+            } catch (e: Exception) {
+                _apiState.value = ApiState.Error(e.message ?: "Contribution failed")
+            }
+        }
     }
 
     fun resetState() {
