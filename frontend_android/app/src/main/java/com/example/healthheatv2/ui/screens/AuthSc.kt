@@ -56,12 +56,16 @@ fun AuthScreen(
                     viewModel.setLoading()
                     val webClientId = "106908032906-h890o1rbd0k8d3bneqavhre92i45sfmd.apps.googleusercontent.com"
                     val credentialManager = CredentialManager.create(context)
-                    val googleIdOption = GetGoogleIdOption.Builder()
-                        .setFilterByAuthorizedAccounts(false)
-                        .setServerClientId(webClientId)
-                        .setAutoSelectEnabled(true)
+                    
+                    // For explicit button clicks, GetSignInWithGoogleOption is required
+                    val signInWithGoogleOption = com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+                        .Builder(webClientId)
                         .build()
-                    val request = GetCredentialRequest.Builder().addCredentialOption(googleIdOption).build()
+                        
+                    val request = GetCredentialRequest.Builder()
+                        .addCredentialOption(signInWithGoogleOption)
+                        .build()
+                        
                     val result = credentialManager.getCredential(context, request)
                     val credential = result.credential
                     if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
@@ -72,7 +76,8 @@ fun AuthScreen(
                     }
                 } catch (e: Exception) {
                     Log.e("Auth", "Sign In Failed", e)
-                    viewModel.setError(e.localizedMessage ?: "Sign-In failed")
+                    // Simplify the error message for users
+                    viewModel.setError("Sign in failed. Make sure you have a Google account on this device.")
                 }
             }
         }
