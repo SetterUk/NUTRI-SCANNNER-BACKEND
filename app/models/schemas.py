@@ -41,7 +41,7 @@ class ReportMissingRequest(BaseModel):
 
 class ContributeProductRequest(BaseModel):
     name: str
-    ingredients_text: str
+    ingredients_text: Optional[str] = None
 
 class ManualProductRequest(BaseModel):
     barcode: str

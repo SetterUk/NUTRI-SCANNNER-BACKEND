@@ -223,6 +223,8 @@ async def scan_product(
             "age": profile.age if profile else None,
             "weight_kg": profile.weight_kg if profile else None,
             "height": profile.height if profile else None,
+            "gender": profile.gender if profile else None,
+            "activity_level": profile.activity_level if profile else None,
             "dietary_preferences": profile.dietary_preferences if profile else None,
             "health_tags": profile.health_tags if profile else [],
             "allergies": profile.allergies if profile else [],
@@ -339,21 +341,24 @@ async def contribute_to_product(
     result = await session.execute(statement)
     product = result.scalars().first()
 
+    ingredients_text = data.ingredients_text or ""
+    ingredients_list = [i.strip() for i in ingredients_text.split(",") if i.strip()]
+
     if not product:
         # If it truly doesn't exist, create a skeleton product
         product = Product(
             barcode=barcode,
             name=data.name,
-            ingredients_text=data.ingredients_text,
-            ingredients=[i.strip() for i in data.ingredients_text.split(",")],
+            ingredients_text=ingredients_text,
+            ingredients=ingredients_list,
             source="MANUAL"
         )
         session.add(product)
     else:
         # Update existing
         product.name = data.name
-        product.ingredients_text = data.ingredients_text
-        product.ingredients = [i.strip() for i in data.ingredients_text.split(",")]
+        product.ingredients_text = ingredients_text
+        product.ingredients = ingredients_list
         
         # Invalidate AI Cache!
         product.health_score = None
@@ -421,6 +426,8 @@ class ProfileUpdateRequest(BaseModel):
     age: Optional[int] = None
     height: Optional[float] = None
     weight_kg: Optional[float] = None
+    gender: Optional[str] = None
+    activity_level: Optional[str] = None
 
 @router.put("/profile")
 async def update_profile(
@@ -438,11 +445,11 @@ async def update_profile(
         session.add(profile)
 
     if data.preferred_name is not None:
-        profile.preferred_name = data.preferred_name
+        profile.preferred_name = data.preferred_name.strip() or None
     if data.dietary_preferences is not None:
-        profile.dietary_preferences = data.dietary_preferences
+        profile.dietary_preferences = data.dietary_preferences.strip() or None
     if data.health_goals is not None:
-        profile.health_goals = data.health_goals
+        profile.health_goals = data.health_goals.strip() or None
     if data.allergies is not None:
         profile.allergies = data.allergies
     if data.health_tags is not None:
@@ -453,6 +460,10 @@ async def update_profile(
         profile.height = data.height
     if data.weight_kg is not None:
         profile.weight_kg = data.weight_kg
+    if data.gender is not None:
+        profile.gender = data.gender.strip() or None
+    if data.activity_level is not None:
+        profile.activity_level = data.activity_level.strip() or None
 
     await session.commit()
     await session.refresh(profile)

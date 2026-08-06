@@ -44,8 +44,12 @@ fun ProfileScreen(
     var height by remember { mutableStateOf(userProfile?.height?.toString() ?: "") }
     var allergies by remember { mutableStateOf(userProfile?.allergies?.joinToString(", ") ?: "") }
     var healthGoals by remember { mutableStateOf(userProfile?.healthGoals ?: "") }
+    var gender by remember { mutableStateOf(userProfile?.gender ?: "Prefer not to say") }
+    var activityLevel by remember { mutableStateOf(userProfile?.activityLevel ?: "Prefer not to say") }
 
     val diets = listOf("None", "Vegan", "Vegetarian", "Keto", "Diabetic", "Bulking", "Gluten-Free")
+    val genders = listOf("Prefer not to say", "Female", "Male", "Non-binary", "Other")
+    val activityLevels = listOf("Prefer not to say", "Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Extra Active")
     var selectedDiet by remember { mutableStateOf(userProfile?.dietaryPreferences ?: "None") }
 
     var isSaving by remember { mutableStateOf(false) }
@@ -64,6 +68,8 @@ fun ProfileScreen(
             allergies = profile.allergies?.joinToString(", ") ?: ""
             healthGoals = profile.healthGoals ?: ""
             selectedDiet = profile.dietaryPreferences.takeIf { !it.isNullOrBlank() } ?: "None"
+            gender = profile.gender ?: "Prefer not to say"
+            activityLevel = profile.activityLevel ?: "Prefer not to say"
             // Once profile loads, switch to view mode
             isEditing = false
         }
@@ -76,7 +82,9 @@ fun ProfileScreen(
         height.takeIf { it.isNotBlank() },
         selectedDiet.takeIf { it != "None" && it.isNotBlank() },
         allergies.takeIf { it.isNotBlank() },
-        healthGoals.takeIf { it.isNotBlank() }
+        healthGoals.takeIf { it.isNotBlank() },
+        gender.takeIf { it != "Prefer not to say" },
+        activityLevel.takeIf { it != "Prefer not to say" }
     )
     val filledCount = fields.count { it != null }
     val completionPercentage = if (fields.isNotEmpty()) filledCount.toFloat() / fields.size else 0f
@@ -248,7 +256,8 @@ fun ProfileScreen(
                     OutlinedTextField(
                         value = allergies,
                         onValueChange = { allergies = it },
-                        label = { Text("Allergies (e.g. Peanuts, Dairy)") },
+                        label = { Text("Allergies (comma separated, e.g. Peanuts, Dairy)") },
+                        placeholder = { Text("Separate multiple allergies with commas") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colors.accentGreen,
@@ -261,11 +270,77 @@ fun ProfileScreen(
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Gender",
+                        color = colors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    genders.forEach { option ->
+                        val selected = gender == option
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) colors.accentGreen.copy(alpha = 0.15f) else colors.card)
+                                .clickable { gender = option }
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = option,
+                                color = if (selected) colors.accentGreen else colors.textPrimary,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 16.sp
+                            )
+                            if (selected) {
+                                Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accentGreen)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Activity Level",
+                        color = colors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    activityLevels.forEach { option ->
+                        val selected = activityLevel == option
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) colors.accentGreen.copy(alpha = 0.15f) else colors.card)
+                                .clickable { activityLevel = option }
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = option,
+                                color = if (selected) colors.accentGreen else colors.textPrimary,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 16.sp
+                            )
+                            if (selected) {
+                                Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accentGreen)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = healthGoals,
                         onValueChange = { healthGoals = it },
-                        label = { Text("Health Goals & Conditions") },
-                        placeholder = { Text("e.g. Weight loss, Diabetic") },
+                        label = { Text("Health Goals & Conditions (comma separated)") },
+                        placeholder = { Text("e.g. Weight loss, Diabetic, High blood pressure") },
                         modifier = Modifier.fillMaxWidth().height(100.dp),
                         maxLines = 3,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -329,6 +404,8 @@ fun ProfileScreen(
                                     if (age.isNotBlank()) profileData["age"] = age.toIntOrNull() ?: 0
                                     if (height.isNotBlank()) profileData["height"] = height.toDoubleOrNull() ?: 0.0
                                     if (weight.isNotBlank()) profileData["weight_kg"] = weight.toDoubleOrNull() ?: 0.0
+                                    profileData["gender"] = if (gender == "Prefer not to say") "" else gender
+                                    profileData["activity_level"] = if (activityLevel == "Prefer not to say") "" else activityLevel
                                     profileData["allergies"] = if (allergies.isNotBlank())
                                         allergies.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                                     else emptyList<String>()
@@ -384,6 +461,18 @@ fun ProfileScreen(
                     ProfileInfoCard(
                         label = "Health Goals & Conditions",
                         value = if (healthGoals.isNotBlank()) healthGoals else "Not set",
+                        colors = colors
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    ProfileInfoCard(
+                        label = "Gender",
+                        value = if (gender != "Prefer not to say") gender else "Not set",
+                        colors = colors
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    ProfileInfoCard(
+                        label = "Activity Level",
+                        value = if (activityLevel != "Prefer not to say") activityLevel else "Not set",
                         colors = colors
                     )
                     Spacer(modifier = Modifier.height(24.dp))

@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -45,6 +46,13 @@ fun OnboardingScreen(
     var height by remember { mutableStateOf("") }
     var allergies by remember { mutableStateOf("") }
     var healthGoals by remember { mutableStateOf("") }
+    var gender by remember { mutableStateOf("Prefer not to say") }
+    var activityLevel by remember { mutableStateOf("Prefer not to say") }
+    var selectedDiet by remember { mutableStateOf("None") }
+
+    val diets = listOf("None", "Vegan", "Vegetarian", "Keto", "Diabetic", "Bulking", "Gluten-Free")
+    val genders = listOf("Prefer not to say", "Female", "Male", "Non-binary", "Other")
+    val activityLevels = listOf("Prefer not to say", "Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Extra Active")
 
     var isSaving by remember { mutableStateOf(false) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
@@ -309,7 +317,8 @@ fun OnboardingScreen(
                             OutlinedTextField(
                                 value = allergies,
                                 onValueChange = { allergies = it },
-                                label = { Text("Allergies (e.g. Peanuts, Dairy)") },
+                                label = { Text("Allergies (comma separated, e.g. Peanuts, Dairy)") },
+                                placeholder = { Text("Separate multiple allergies with commas") },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = colors.accentGreen,
@@ -323,11 +332,113 @@ fun OnboardingScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
+                            Text(
+                                text = "Gender",
+                                color = colors.textPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            genders.forEach { option ->
+                                val selected = gender == option
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (selected) colors.accentGreen.copy(alpha = 0.15f) else colors.card)
+                                        .clickable { gender = option }
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = option,
+                                        color = if (selected) colors.accentGreen else colors.textPrimary,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 16.sp
+                                    )
+                                    if (selected) {
+                                        Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accentGreen)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = "Activity Level",
+                                color = colors.textPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            activityLevels.forEach { option ->
+                                val selected = activityLevel == option
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (selected) colors.accentGreen.copy(alpha = 0.15f) else colors.card)
+                                        .clickable { activityLevel = option }
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = option,
+                                        color = if (selected) colors.accentGreen else colors.textPrimary,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 16.sp
+                                    )
+                                    if (selected) {
+                                        Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accentGreen)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = "Dietary Preference",
+                                color = colors.textPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            diets.forEach { option ->
+                                val selected = selectedDiet == option
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (selected) colors.accentGreen.copy(alpha = 0.15f) else colors.card)
+                                        .clickable { selectedDiet = option }
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = option,
+                                        color = if (selected) colors.accentGreen else colors.textPrimary,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 16.sp
+                                    )
+                                    if (selected) {
+                                        Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accentGreen)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
                             OutlinedTextField(
                                 value = healthGoals,
                                 onValueChange = { healthGoals = it },
-                                label = { Text("Health Goals & Conditions") },
-                                placeholder = { Text("e.g. Weight loss, Diabetic") },
+                                label = { Text("Health Goals & Conditions (comma separated)") },
+                                placeholder = { Text("e.g. Weight loss, Diabetic, High blood pressure") },
                                 modifier = Modifier.fillMaxWidth().height(120.dp),
                                 maxLines = 4,
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -366,7 +477,12 @@ fun OnboardingScreen(
                                             if (weight.isNotBlank()) profileData["weight_kg"] = weight.toDoubleOrNull() ?: 0.0
                                             if (allergies.isNotBlank()) {
                                                 profileData["allergies"] = allergies.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                                            } else {
+                                                profileData["allergies"] = emptyList<String>()
                                             }
+                                            profileData["dietary_preferences"] = if (selectedDiet == "None") "" else selectedDiet
+                                            profileData["gender"] = if (gender == "Prefer not to say") "" else gender
+                                            profileData["activity_level"] = if (activityLevel == "Prefer not to say") "" else activityLevel
                                             if (healthGoals.isNotBlank()) profileData["health_goals"] = healthGoals
 
                                             RetrofitClient.apiService.updateProfile(profileData)

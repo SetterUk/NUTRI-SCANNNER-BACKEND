@@ -405,27 +405,7 @@ private fun ProductNotFoundScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = colors.background, modifier = Modifier.size(20.dp))
-                        Text("Take a Photo of Ingredients", color = colors.background, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Scan Another
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(2.dp, colors.border, RoundedCornerShape(28.dp))
-                    .clickable { onScanAnother() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Scan Another Barcode", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            }
-        }
-    }
+                                Text("Take a Photo of the Product Label", color = colors.background, fontWeight = FontWeight.Bold, fontSize = 15.sp)
 
     // Contribution Dialog
     if (showDialog) {
@@ -637,7 +617,7 @@ private fun ProductHero(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                
+
                 if (isUnknown) {
                     Spacer(Modifier.width(8.dp))
                     Box(
@@ -668,7 +648,7 @@ private fun ProductHero(
                     text = {
                         Column {
                             Text(
-                                "Please verify the extracted ingredients and provide a product name.",
+                                "Please capture the product label image. We will extract ingredients or nutrition facts from the label. The extracted label text is optional, but helpful for faster analysis.",
                                 color = colors.textSecondary,
                                 fontSize = 14.sp
                             )
@@ -684,7 +664,8 @@ private fun ProductHero(
                             androidx.compose.material3.OutlinedTextField(
                                 value = ocrText,
                                 onValueChange = { ocrText = it },
-                                label = { Text("Ingredients (comma separated)", color = colors.textHint) },
+                                label = { Text("Label text / Ingredients (optional)", color = colors.textHint) },
+                                placeholder = { Text("Optional: label ingredients, nutrients or nutrition facts") },
                                 minLines = 4,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -693,12 +674,13 @@ private fun ProductHero(
                     confirmButton = {
                         androidx.compose.material3.TextButton(
                             onClick = {
-                                if (newName.isNotBlank() && ocrText.isNotBlank()) {
-                                    onContribute(newName, ocrText)
+                                if (newName.isNotBlank()) {
+                                    val finalName = newName
+                                    onContribute(finalName, ocrText)
                                     showRenameDialog = false
                                 }
                             }
-                        ) { Text("Save to Database", color = colors.accentBlue) }
+                        ) { Text("Submit Label for Analysis", color = colors.accentBlue) }
                     },
                     dismissButton = {
                         androidx.compose.material3.TextButton(onClick = { showRenameDialog = false }) {
@@ -734,7 +716,7 @@ private fun VerdictCard(
 ) {
     val colors = LocalAppColors.current
 
-    
+
 
     Column(
         modifier = modifier
@@ -812,7 +794,7 @@ private fun ScoreGauge(modifier: Modifier, score: Int, onClick: () -> Unit) {
         else -> colors.accentRed
     }
 
-    
+
 
     Column(
         modifier = modifier
@@ -897,7 +879,7 @@ private fun OfficialRatingsRow(nutriScore: String?, novaGroup: Int?, ecoScore: S
                 description = nutriScoreDesc(nutriGrade),
                 color = nutriColor
             )
-            
+
             val ecoGrade = ecoScore?.uppercase()?.takeIf { it != "UNKNOWN" && it != "NOT-APPLICABLE" }
             if (ecoGrade != null) {
                 val ecoColor = nutriScoreColor(ecoGrade, colors)
@@ -961,7 +943,7 @@ private fun OfficialRatingsRow(nutriScore: String?, novaGroup: Int?, ecoScore: S
 @Composable
 private fun GradeCard(modifier: Modifier, label: String, grade: String, description: String, color: Color) {
     val colors = LocalAppColors.current
-    
+
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -1013,7 +995,7 @@ private fun ecoScoreDesc(grade: String) = when (grade) {
 private fun NutrientLevelsCard(nutrientLevels: Map<String, String>) {
     val colors = LocalAppColors.current
 
-    
+
 
     Column(
         modifier = Modifier
@@ -1290,7 +1272,7 @@ fun SectionTitle(title: String, padding: androidx.compose.ui.unit.Dp = 0.dp) {
 @Composable
 private fun AnimatedAmbientBackground(verdictColor: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "ambient")
-    
+
     val offsetX1 by infiniteTransition.animateFloat(
         initialValue = -0.2f, targetValue = 1.2f,
         animationSpec = infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Reverse),
@@ -1315,13 +1297,13 @@ private fun AnimatedAmbientBackground(verdictColor: Color) {
 
     val colors = LocalAppColors.current
     val isDark = colors.isDark
-    
+
     Canvas(modifier = Modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
 
         val orbColor = if (isDark) verdictColor.copy(alpha = 0.15f) else verdictColor.copy(alpha = 0.08f)
-        
+
         drawRect(
             brush = Brush.radialGradient(
                 colors = listOf(orbColor, Color.Transparent),
@@ -1329,7 +1311,7 @@ private fun AnimatedAmbientBackground(verdictColor: Color) {
                 radius = width * 1.2f
             )
         )
-        
+
         drawRect(
             brush = Brush.radialGradient(
                 colors = listOf(orbColor, Color.Transparent),
@@ -1376,4 +1358,5 @@ private fun NonFoodCard(modifier: Modifier = Modifier) {
             )
         }
     }
+}
 }
