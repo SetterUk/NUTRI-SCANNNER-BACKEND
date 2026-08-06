@@ -41,21 +41,16 @@ class AuthViewModel : ViewModel() {
         setLoading()
         viewModelScope.launch {
             try {
+                // Send the raw Google ID token to our backend FIRST
+                val backendResponse = RetrofitClient.apiService.googleAuth(TokenData(idToken))
+                RetrofitClient.authToken = backendResponse.accessToken
+                
+                // Then optionally login to Firebase
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
-                val authResult = auth!!.signInWithCredential(credential).await()
-                
-                // Get fresh ID token from Firebase to send to backend
-                val firebaseUser = authResult.user
-                val freshIdToken = firebaseUser?.getIdToken(true)?.await()?.token
-                
-                if (freshIdToken != null) {
-                    val backendResponse = RetrofitClient.apiService.googleAuth(TokenData(freshIdToken))
-                    RetrofitClient.authToken = backendResponse.accessToken
-                }
+                auth?.signInWithCredential(credential)?.await()
                 
                 _authState.value = AuthState.Success
             } catch (e: Exception) {
-                // ADD THIS LINE TO CATCH THE THIEF!
                 android.util.Log.e("Firebase_Auth_Error", "Detailed error:", e)
 
                 _authState.value = AuthState.Error(e.localizedMessage ?: "Google Sign-In failed")
