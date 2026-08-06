@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
+import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.launch
 import com.example.healthheatv2.network.RetrofitClient
 
@@ -46,6 +47,17 @@ fun ProfileScreen(
     
     var isSaving by remember { mutableStateOf(false) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(userProfile) {
+        userProfile?.let { profile ->
+            age = profile.age?.toString() ?: ""
+            weight = profile.weightKg?.toString() ?: ""
+            height = profile.height?.toString() ?: ""
+            allergies = profile.allergies?.joinToString(", ") ?: ""
+            healthGoals = profile.healthGoals ?: ""
+            selectedDiet = profile.dietaryPreferences.takeIf { !it.isNullOrBlank() } ?: "None"
+        }
+    }
 
     // Calculate Completion dynamically based on current input
     val fields = listOf(
