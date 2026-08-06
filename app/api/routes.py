@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.models.products import Product, UserAddedProduct
 from app.services.openfoodfacts import get_product_from_api
-from app.models.schemas import ProductResponse, ReportMissingRequest, ManualProductRequest, UserRegister, UserLogin
+from app.models.schemas import ProductResponse, ReportMissingRequest, ManualProductRequest, UserRegister, UserLogin, ContributeProductRequest
 from app.api.deps import create_access_token, get_current_user, get_password_hash, verify_password, get_current_user_optional
 from app.models.users import User, UserProfile, UserScan
 from google.oauth2 import id_token
