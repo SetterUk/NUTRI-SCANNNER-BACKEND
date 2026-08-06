@@ -153,12 +153,12 @@ fun OnboardingScreen(
                             Spacer(modifier = Modifier.height(4.dp))
 
                             val tricks = listOf(
-                                Pair("\"0g Trans Fat\"", "A product can contain up to 0.5g trans fat per serving and still legally claim zero. Companies just shrink the serving size."),
-                                Pair("\"Natural\" or \"Natural Flavors\"", "This label means almost nothing. Legally, it can include highly processed chemical compounds derived from a natural source."),
-                                Pair("\"Low Fat\"", "When fat is removed, food tastes bland. Companies replace it with sugar, salt, and additives — making it often worse than the original."),
-                                Pair("\"Made with Real Fruit\"", "That picture of strawberries on the box? The product might contain 2% real fruit. The rest is artificial flavoring and dye."),
-                                Pair("\"Multigrain\" or \"Wheat\"", "Doesn't mean whole grain. Most multigrain products are made from refined flour, stripped of nutrients, with a few whole grains thrown in for show."),
-                                Pair("Hidden Sugar", "Sugar has over 60 different names on ingredient lists — corn syrup, dextrose, maltose, fructose, cane juice... Companies use multiple names so no single one appears first."),
+                                Pair("\"0g Trans Fat\" 🎩", "A product can have up to 0.5g of trans fat per serving and still legally print ZERO on the label. Their secret? Just make the serving size hilariously tiny. One chip. Enjoy."),
+                                Pair("\"Natural\" or \"Natural Flavors\" 🌿", "Sounds wholesome, right? Legally, this can include highly processed chemicals — as long as they were once derived from something natural. Your shoe is also technically natural. Just saying."),
+                                Pair("\"Low Fat\" 😇", "Fat removed = taste removed. So companies dump in sugar, salt, and a cocktail of additives to fix it. Congrats, you bought the unhealthier version of the unhealthy thing."),
+                                Pair("\"Made with Real Fruit\" 🍓", "That beautiful strawberry on the box? The product might contain 2% real fruit. The rest is artificial flavoring, red dye, and the audacity to put a strawberry on the packaging."),
+                                Pair("\"Multigrain\" or \"Wheat\" 🌾", "Spoiler: multigrain just means multiple types of refined flour. It's like calling a pizza 'multivegetable' because it has tomato sauce. A few whole grains are sprinkled in for show."),
+                                Pair("Hidden Sugar has 60+ aliases 🕵️", "Corn syrup. Dextrose. Maltose. Fructose. Cane juice. Evaporated cane juice (same thing, fancier name). Companies split sugar across 10 names so none appear first on the list. Pure villain behaviour."),
                             )
 
                             tricks.forEach { (title, desc) ->
@@ -199,7 +199,7 @@ fun OnboardingScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "HealthHeat cuts through all of this — automatically, every scan. 🔍",
+                                text = "We see all of it. Every scan, every trick, every sneaky name. You're welcome. 🔍",
                                 color = colors.accentGreen,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 15.sp,
