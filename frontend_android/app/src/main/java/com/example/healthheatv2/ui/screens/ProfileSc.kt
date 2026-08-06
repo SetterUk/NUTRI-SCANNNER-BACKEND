@@ -47,14 +47,14 @@ fun ProfileScreen(
     var isSaving by remember { mutableStateOf(false) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
 
-    // Calculate Completion
+    // Calculate Completion dynamically based on current input
     val fields = listOf(
-        userProfile?.age,
-        userProfile?.weightKg,
-        userProfile?.height,
-        userProfile?.dietaryPreferences.takeIf { it != "None" && !it.isNullOrBlank() },
-        userProfile?.allergies.takeIf { !it.isNullOrEmpty() },
-        userProfile?.healthGoals.takeIf { !it.isNullOrBlank() }
+        age.takeIf { it.isNotBlank() },
+        weight.takeIf { it.isNotBlank() },
+        height.takeIf { it.isNotBlank() },
+        selectedDiet.takeIf { it != "None" && it.isNotBlank() },
+        allergies.takeIf { it.isNotBlank() },
+        healthGoals.takeIf { it.isNotBlank() }
     )
     val filledCount = fields.count { it != null }
     val completionPercentage = if (fields.isNotEmpty()) filledCount.toFloat() / fields.size else 0f
@@ -280,7 +280,7 @@ fun ProfileScreen(
                                 authViewModel.fetchProfile()
                                 saveMessage = "Profile updated successfully!"
                             } catch (e: Exception) {
-                                saveMessage = "Failed to update profile."
+                                saveMessage = "Failed: ${e.message}"
                             } finally {
                                 isSaving = false
                             }
