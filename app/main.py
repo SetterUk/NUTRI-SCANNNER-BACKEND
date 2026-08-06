@@ -7,13 +7,11 @@ from app.api.routes import router as api_router
 from app.api.users import router as users_router
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from fastapi.responses import JSONResponse
 from fastapi import Request
-
-limiter = Limiter(key_func=get_remote_address)
+from app.core.limiter import limiter
 if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,

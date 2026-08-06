@@ -19,7 +19,7 @@ from typing import List
 from app.agents.workflow import nutrition_app_workflow
 import logging
 from fastapi import Request
-from app.main import limiter
+from app.core.limiter import limiter
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
