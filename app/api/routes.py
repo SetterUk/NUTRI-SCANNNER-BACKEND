@@ -18,6 +18,8 @@ from typing import List
 # --- 1. IMPORT THE LANGGRAPH WORKFLOW ---
 from app.agents.workflow import nutrition_app_workflow
 import logging
+from fastapi import Request
+from app.main import limiter
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -32,7 +34,8 @@ class TokenData(BaseModel):
     id_token: str
 
 @router.post("/auth/register")
-async def register_user(data: UserRegister, session: AsyncSession = Depends(get_session)):
+@limiter.limit("5/minute")
+async def register_user(request: Request, data: UserRegister, session: AsyncSession = Depends(get_session)):
     """Email/Password Registration"""
     # 1. Check if email exists
     statement = select(User).where(User.email == data.email)
@@ -60,7 +63,8 @@ async def register_user(data: UserRegister, session: AsyncSession = Depends(get_
     return {"access_token": access_token, "token_type": "bearer", "user_id": new_user.id}
 
 @router.post("/auth/login")
-async def login_user(data: UserLogin, session: AsyncSession = Depends(get_session)):
+@limiter.limit("5/minute")
+async def login_user(request: Request, data: UserLogin, session: AsyncSession = Depends(get_session)):
     """Email/Password Login"""
     statement = select(User).where(User.email == data.email)
     result = await session.execute(statement)
@@ -127,8 +131,10 @@ async def google_auth(data: TokenData, session: AsyncSession = Depends(get_sessi
         raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
 
 @router.post("/scan/{barcode}", response_model=ProductResponse)
+@limiter.limit("20/minute")
 async def scan_product(
     barcode: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
