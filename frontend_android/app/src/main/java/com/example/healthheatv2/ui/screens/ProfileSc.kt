@@ -38,6 +38,7 @@ fun ProfileScreen(
 
     val userProfile by authViewModel.userProfile.collectAsState()
 
+    var preferredName by remember { mutableStateOf(userProfile?.preferredName ?: "") }
     var age by remember { mutableStateOf(userProfile?.age?.toString() ?: "") }
     var weight by remember { mutableStateOf(userProfile?.weightKg?.toString() ?: "") }
     var height by remember { mutableStateOf(userProfile?.height?.toString() ?: "") }
@@ -56,6 +57,7 @@ fun ProfileScreen(
 
     LaunchedEffect(userProfile) {
         userProfile?.let { profile ->
+            preferredName = profile.preferredName ?: ""
             age = profile.age?.toString() ?: ""
             weight = profile.weightKg?.toString() ?: ""
             height = profile.height?.toString() ?: ""
@@ -173,6 +175,24 @@ fun ProfileScreen(
 
                 if (isEditing) {
                     // ── EDIT MODE ─────────────────────────────────────────────
+
+                    OutlinedTextField(
+                        value = preferredName,
+                        onValueChange = { preferredName = it },
+                        label = { Text("Your Name") },
+                        placeholder = { Text("What should we call you?") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colors.accentGreen,
+                            unfocusedBorderColor = colors.border,
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary,
+                            cursorColor = colors.accentGreen
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedTextField(
                         value = age,
@@ -304,6 +324,7 @@ fun ProfileScreen(
                                 saveMessage = null
                                 try {
                                     val profileData = mutableMapOf<String, Any>()
+                                    if (preferredName.isNotBlank()) profileData["preferred_name"] = preferredName
                                     profileData["dietary_preferences"] = if (selectedDiet == "None") "" else selectedDiet
                                     if (age.isNotBlank()) profileData["age"] = age.toIntOrNull() ?: 0
                                     if (height.isNotBlank()) profileData["height"] = height.toDoubleOrNull() ?: 0.0
@@ -337,8 +358,12 @@ fun ProfileScreen(
                     }
 
                 } else {
-                    // ── VIEW MODE ──────────────────────────────────────────────
+                    // ── VIEW MODE ──────────────────────────────────────────
 
+                    if (preferredName.isNotBlank()) {
+                        ProfileInfoCard(label = "👋 Display Name", value = preferredName, colors = colors)
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                     ProfileInfoCard(label = "Age", value = if (age.isNotBlank()) "$age years" else "Not set", colors = colors)
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

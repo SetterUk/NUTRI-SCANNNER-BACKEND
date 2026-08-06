@@ -75,6 +75,7 @@ fun SearchHubScreen(
     val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
     val smashCount = history.count { (it.foodResponse.healthScore ?: 0) >= smashThreshold }
     val passCount = history.count { (it.foodResponse.healthScore ?: 0) < smashThreshold }
+    val userProfile by authViewModel.userProfile.collectAsState()
     val latestItem = history.firstOrNull()
 
     Box(
@@ -102,7 +103,7 @@ fun SearchHubScreen(
         // ── Greeting + headline ───────────────────
         item {
             Spacer(Modifier.height(12.dp))
-            GreetingSection()
+            GreetingSection(userName = userProfile?.preferredName)
         }
 
         // ── Featured CTA Card ─────────────────────
@@ -225,7 +226,7 @@ private fun HomeTopBar(
 //  Greeting
 // ─────────────────────────────────────────────────
 @Composable
-private fun GreetingSection() {
+private fun GreetingSection(userName: String? = null) {
     val colors = LocalAppColors.current
     val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
     val greeting = when {
@@ -238,10 +239,12 @@ private fun GreetingSection() {
         hour < 17 -> "🌤️"
         else -> "🌙"
     }
+    val displayName = userName?.trim()?.takeIf { it.isNotBlank() }
 
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Text(
-            text = "$emoji $greeting",
+            text = if (displayName != null) "$emoji $greeting, $displayName!"
+                   else "$emoji $greeting",
             color = colors.textSecondary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium

@@ -413,6 +413,7 @@ async def get_profile(
     return profile
 
 class ProfileUpdateRequest(BaseModel):
+    preferred_name: Optional[str] = None
     dietary_preferences: Optional[str] = None
     health_goals: Optional[str] = None
     allergies: Optional[List[str]] = None
@@ -436,6 +437,8 @@ async def update_profile(
         profile = UserProfile(user_id=current_user.id)
         session.add(profile)
 
+    if data.preferred_name is not None:
+        profile.preferred_name = data.preferred_name
     if data.dietary_preferences is not None:
         profile.dietary_preferences = data.dietary_preferences
     if data.health_goals is not None:

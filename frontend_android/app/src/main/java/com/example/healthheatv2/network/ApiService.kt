@@ -51,7 +51,8 @@ data class UserProfileResponse(
     @SerializedName("dietary_preferences") val dietaryPreferences: String?,
     @SerializedName("health_goals") val healthGoals: String?,
     val allergies: List<String>? = emptyList(),
-    @SerializedName("health_tags") val healthTags: List<String>? = emptyList()
+    @SerializedName("health_tags") val healthTags: List<String>? = emptyList(),
+    @SerializedName("preferred_name") val preferredName: String? = null
 )
 data class FoodResponse(
     @SerializedName("verdict") val verdict: String?,

@@ -19,6 +19,9 @@ class UserProfile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True, unique=True)
     
+    # Identity
+    preferred_name: Optional[str] = None
+    
     # Physical attributes
     age: Optional[int] = None
     weight_kg: Optional[float] = Field(default=None, description="Weight in kilograms")

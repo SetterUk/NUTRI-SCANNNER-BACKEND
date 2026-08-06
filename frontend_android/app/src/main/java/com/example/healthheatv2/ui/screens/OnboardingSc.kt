@@ -32,6 +32,7 @@ fun OnboardingScreen(
     val colors = LocalAppColors.current
     val coroutineScope = rememberCoroutineScope()
     
+    var preferredName by remember { mutableStateOf("") }
     var age by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
     var height by remember { mutableStateOf("") }
@@ -79,13 +80,31 @@ fun OnboardingScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Fill in your details to get hyper-personalized nutrition analysis. You can always skip and do this later.",
+                    text = "We built HealthHeat because we believe everyone deserves to know what they put in their body — not just athletes or nutrition experts, but every person, every family.\n\nYour health is personal. That's why we ask a few simple questions — so our AI can speak to *you*, not just scan a barcode. Every scan becomes a moment of clarity tailored to your life.\n\nFill in what you can. Skip what you prefer. We're here whenever you're ready. 💚",
                     color = colors.textSecondary,
                     fontSize = 15.sp,
-                    lineHeight = 22.sp
+                    lineHeight = 24.sp
                 )
                 
                 Spacer(modifier = Modifier.height(32.dp))
+
+                OutlinedTextField(
+                    value = preferredName,
+                    onValueChange = { preferredName = it },
+                    label = { Text("Your name") },
+                    placeholder = { Text("What should we call you?") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = colors.accentGreen,
+                        unfocusedBorderColor = colors.border,
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.accentGreen
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Age
                 OutlinedTextField(
@@ -187,6 +206,7 @@ fun OnboardingScreen(
                             isSaving = true
                             try {
                                 val profileData = mutableMapOf<String, Any>()
+                                if (preferredName.isNotBlank()) profileData["preferred_name"] = preferredName
                                 if (age.isNotBlank()) profileData["age"] = age.toIntOrNull() ?: 0
                                 if (height.isNotBlank()) profileData["height"] = height.toDoubleOrNull() ?: 0.0
                                 if (weight.isNotBlank()) profileData["weight_kg"] = weight.toDoubleOrNull() ?: 0.0
