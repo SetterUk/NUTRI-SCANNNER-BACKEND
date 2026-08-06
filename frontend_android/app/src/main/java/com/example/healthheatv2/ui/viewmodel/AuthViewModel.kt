@@ -108,4 +108,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getCurrentUser() = auth?.currentUser
+
+    fun hasSeenOnboarding(): Boolean = prefs.getBoolean("onboarding_seen", false)
+
+    fun markOnboardingSeen() = prefs.edit().putBoolean("onboarding_seen", true).apply()
 }

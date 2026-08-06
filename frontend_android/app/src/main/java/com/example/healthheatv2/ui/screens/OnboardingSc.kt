@@ -47,6 +47,7 @@ fun OnboardingScreen(
     var healthGoals by remember { mutableStateOf("") }
 
     var isSaving by remember { mutableStateOf(false) }
+    var saveMessage by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -79,7 +80,10 @@ fun OnboardingScreen(
                         )
                     }
                 }
-                IconButton(onClick = onFinish) {
+                IconButton(onClick = {
+                    authViewModel.markOnboardingSeen()
+                    onFinish()
+                }) {
                     Icon(Icons.Filled.Close, contentDescription = "Skip all", tint = colors.textSecondary)
                 }
             }
@@ -338,10 +342,22 @@ fun OnboardingScreen(
 
                             Spacer(modifier = Modifier.height(48.dp))
 
+                            if (saveMessage != null) {
+                                Text(
+                                    text = saveMessage!!,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp),
+                                    fontSize = 14.sp
+                                )
+                            }
+
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
                                         isSaving = true
+                                        saveMessage = null
                                         try {
                                             val profileData = mutableMapOf<String, Any>()
                                             if (preferredName.isNotBlank()) profileData["preferred_name"] = preferredName
@@ -355,9 +371,10 @@ fun OnboardingScreen(
 
                                             RetrofitClient.apiService.updateProfile(profileData)
                                             authViewModel.fetchProfile()
+                                            authViewModel.markOnboardingSeen()
                                             onFinish()
                                         } catch (e: Exception) {
-                                            // Ignore for now
+                                            saveMessage = "Could not save profile. ${e.localizedMessage ?: "Please try again."}"
                                         } finally {
                                             isSaving = false
                                         }

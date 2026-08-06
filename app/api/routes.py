@@ -455,4 +455,5 @@ async def update_profile(
         profile.weight_kg = data.weight_kg
 
     await session.commit()
+    await session.refresh(profile)
     return {"status": "success", "message": "Profile updated successfully"}

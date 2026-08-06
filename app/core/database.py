@@ -37,6 +37,16 @@ async def init_db():
         try:
             # 1. Add new columns
             await conn.execute(text("ALTER TABLE product ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'OFF';"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS preferred_name VARCHAR;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS dietary_preferences VARCHAR;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS health_goals VARCHAR;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS allergies JSON DEFAULT '[]';"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS health_tags JSON DEFAULT '[]';"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS gender VARCHAR;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS activity_level VARCHAR;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS age INTEGER;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS height FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS weight_kg FLOAT;"))
             
             # 2. Relax constraints for columns that became Optional
             await conn.execute(text("ALTER TABLE product ALTER COLUMN verdict DROP NOT NULL;"))

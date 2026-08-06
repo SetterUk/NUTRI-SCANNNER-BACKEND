@@ -98,18 +98,15 @@ fun App(modifier: Modifier = Modifier) {
         val authViewModel: AuthViewModel = viewModel()
         val userProfile by authViewModel.userProfile.collectAsState()
 
-        // Decide start destination:
+        // Simple rule:
         // - Not logged in → Auth screen
-        // - Logged in, profile is empty (no age/weight) → Onboarding (can skip)
-        // - Logged in, profile already filled → SearchHub directly
+        // - Logged in + first time ever → Onboarding (once)
+        // - Logged in + has seen onboarding → SearchHub
         val isLoggedIn = authViewModel.getCurrentUser() != null
-        val hasProfile = userProfile?.let {
-            it.age != null || it.weightKg != null || it.height != null
-        } ?: false
         val startDestination = when {
-            !isLoggedIn -> Screen.Auth.route
-            hasProfile  -> Screen.SearchHub.route
-            else        -> Screen.Onboarding.route
+            !isLoggedIn                          -> Screen.Auth.route
+            !authViewModel.hasSeenOnboarding()   -> Screen.Onboarding.route
+            else                                 -> Screen.SearchHub.route
         }
 
         val bottomNavItems = listOf(
