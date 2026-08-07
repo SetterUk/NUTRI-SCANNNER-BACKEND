@@ -1279,7 +1279,11 @@ private fun AlternativeCard(alt: AlternativeProduct) {
         ) {
             SubcomposeAsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(alt.imageUrl)
+                    .data(if (alt.imageUrl?.startsWith("/") == true) {
+                        com.example.healthheatv2.network.RetrofitClient.BASE_URL.dropLast(1) + alt.imageUrl
+                    } else {
+                        alt.imageUrl
+                    })
                     .crossfade(true)
                     .build(),
                 contentDescription = alt.name,

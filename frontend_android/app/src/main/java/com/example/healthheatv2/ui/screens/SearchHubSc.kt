@@ -432,7 +432,11 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
             ) {
                 SubcomposeAsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(product.imageUrl)
+                        .data(if (product.imageUrl?.startsWith("/") == true) {
+                            com.example.healthheatv2.network.RetrofitClient.BASE_URL.dropLast(1) + product.imageUrl
+                        } else {
+                            product.imageUrl
+                        })
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
