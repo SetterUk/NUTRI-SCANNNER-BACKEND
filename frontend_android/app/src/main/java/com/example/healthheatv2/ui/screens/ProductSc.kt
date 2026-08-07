@@ -55,8 +55,17 @@ import android.util.Base64
 import java.io.ByteArrayOutputStream
 
 fun Bitmap.toBase64(): String {
+    // Resize down to max 800px on the longest edge to prevent massive Base64 strings
+    val maxDimension = 800
+    val scale = maxDimension.toFloat() / Math.max(this.width, this.height)
+    val resizedBitmap = if (scale < 1.0f) {
+        Bitmap.createScaledBitmap(this, (this.width * scale).toInt(), (this.height * scale).toInt(), true)
+    } else {
+        this
+    }
+
     val byteArrayOutputStream = ByteArrayOutputStream()
-    this.compress(Bitmap.CompressFormat.JPEG, 80, byteArrayOutputStream)
+    resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream) // 70% quality is plenty
     val byteArray = byteArrayOutputStream.toByteArray()
     return Base64.encodeToString(byteArray, Base64.DEFAULT)
 }
@@ -361,6 +370,7 @@ fun ProductScreen(
             isProcessingOCR = isProcessingOCR,
             onContribute = { name, ingredients ->
                 viewModel.contribute(viewModel.lastScannedBarcode, name, ingredients, productImageBase64)
+                capturedOcrText = ""
             }
         )
     }
