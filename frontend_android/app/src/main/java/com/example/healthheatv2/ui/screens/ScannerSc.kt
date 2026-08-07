@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,8 +88,11 @@ private fun CameraPreviewWithOverlay(
         if (apiState is ApiState.Success || apiState is ApiState.Error) onScanSuccess()
     }
 
+    var isFlashOn by remember { mutableStateOf(false) }
+
     val cameraController = remember {
         LifecycleCameraController(context).apply {
+            cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA
             val barcodeScanner = BarcodeScanning.getClient(
                 BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS).build()
             )
@@ -133,6 +138,29 @@ private fun CameraPreviewWithOverlay(
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(20.dp))
+        }
+
+        // Top right: flash toggle
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(16.dp)
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable {
+                    isFlashOn = !isFlashOn
+                    cameraController.enableTorch(isFlashOn)
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (isFlashOn) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
+                contentDescription = "Flash toggle",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
         }
 
         // Top center: title
