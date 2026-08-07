@@ -66,11 +66,11 @@ class ScannerViewModel(private val repository: ProductRepository) : ViewModel() 
         _apiState.value = ApiState.Success(cachedProduct)
     }
 
-    fun contribute(barcode: String, newName: String, newIngredients: String) {
+    fun contribute(barcode: String, newName: String, newIngredients: String, imageBase64: String?) {
         _apiState.value = ApiState.Loading
         viewModelScope.launch {
             try {
-                repository.contributeToDatabase(barcode, newName, newIngredients)
+                repository.contributeToDatabase(barcode, newName, newIngredients, imageBase64)
                 // Re-fetch product to get the new AI analysis and updated data!
                 lookupBarcode(barcode)
             } catch (e: Exception) {

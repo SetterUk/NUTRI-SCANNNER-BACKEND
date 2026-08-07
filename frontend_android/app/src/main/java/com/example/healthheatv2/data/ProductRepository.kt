@@ -37,12 +37,11 @@ class ProductRepository(
         return networkResponse
     }
 
-    suspend fun contributeToDatabase(barcode: String, newName: String, newIngredients: String) {
-        // Send to backend
+    suspend fun contributeToDatabase(barcode: String, newName: String, newIngredients: String, imageBase64: String?) {
         try {
             apiService.contributeProduct(
                 barcode, 
-                com.example.healthheatv2.network.ContributeRequest(newName, newIngredients)
+                com.example.healthheatv2.network.ContributeRequest(newName, newIngredients, imageBase64)
             )
         } catch (e: Exception) {
             Log.e("REPOSITORY", "Failed to contribute to backend", e)

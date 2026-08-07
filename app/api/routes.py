@@ -18,6 +18,9 @@ from typing import List
 # --- 1. IMPORT THE LANGGRAPH WORKFLOW ---
 from app.agents.workflow import nutrition_app_workflow
 import logging
+import base64
+import os
+import time
 from fastapi import Request
 from app.core.limiter import limiter
 
@@ -366,8 +369,33 @@ async def contribute_to_product(
         product.summary = None
         product.ingredients_analysis = []
         product.nutrition_analysis = {}
-        session.add(product)
+        
+    # Handle Image Upload
+    if data.image_base64:
+        try:
+            # Create static/images directory if it doesn't exist
+            image_dir = os.path.join("app", "static", "images")
+            os.makedirs(image_dir, exist_ok=True)
+            
+            # Remove base64 header if present (e.g. data:image/jpeg;base64,...)
+            img_data = data.image_base64
+            if "," in img_data:
+                img_data = img_data.split(",")[1]
+            
+            image_bytes = base64.b64decode(img_data)
+            
+            # Save file
+            filename = f"{barcode}_{int(time.time())}.jpg"
+            filepath = os.path.join(image_dir, filename)
+            with open(filepath, "wb") as f:
+                f.write(image_bytes)
+                
+            # Set URL
+            product.image_url = f"/static/images/{filename}"
+        except Exception as e:
+            logger.error(f"Failed to process image upload for {barcode}: {e}")
 
+    session.add(product)
     await session.commit()
     return {"status": "success", "message": "Product contributed successfully"}
 

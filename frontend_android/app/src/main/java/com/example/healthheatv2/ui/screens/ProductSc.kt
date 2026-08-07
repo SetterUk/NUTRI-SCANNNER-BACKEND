@@ -51,6 +51,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import android.util.Base64
+import java.io.ByteArrayOutputStream
+
+fun Bitmap.toBase64(): String {
+    val byteArrayOutputStream = ByteArrayOutputStream()
+    this.compress(Bitmap.CompressFormat.JPEG, 80, byteArrayOutputStream)
+    val byteArray = byteArrayOutputStream.toByteArray()
+    return Base64.encodeToString(byteArray, Base64.DEFAULT)
+}
+
+enum class CaptureState { NONE, PRODUCT_FRONT, PRODUCT_LABEL }
+
 @Composable
 fun ProductScreen(
     viewModel: ScannerViewModel,
@@ -59,6 +71,50 @@ fun ProductScreen(
 ) {
     val apiState by viewModel.apiState
     val colors = LocalAppColors.current
+
+    var captureState by remember { mutableStateOf(CaptureState.NONE) }
+    var productImageBase64 by remember { mutableStateOf<String?>(null) }
+    var capturedOcrText by remember { mutableStateOf("") }
+    var isProcessingOCR by remember { mutableStateOf(false) }
+
+    when (captureState) {
+        CaptureState.PRODUCT_FRONT -> {
+            CameraCaptureScreen(
+                title = "Capture Product Front",
+                onCapture = { bitmap ->
+                    productImageBase64 = bitmap.toBase64()
+                    captureState = CaptureState.PRODUCT_LABEL
+                },
+                onCancel = { captureState = CaptureState.NONE }
+            )
+            return
+        }
+        CaptureState.PRODUCT_LABEL -> {
+            CameraCaptureScreen(
+                title = "Capture Product Label (Ingredients)",
+                onCapture = { bitmap ->
+                    isProcessingOCR = true
+                    captureState = CaptureState.NONE
+                    // Process OCR
+                    val image = InputImage.fromBitmap(bitmap, 0)
+                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                    recognizer.process(image)
+                        .addOnSuccessListener { visionText ->
+                            capturedOcrText = visionText.text.replace("\n", ", ")
+                            isProcessingOCR = false
+                        }
+                        .addOnFailureListener {
+                            isProcessingOCR = false
+                        }
+                },
+                onCancel = { captureState = CaptureState.NONE }
+            )
+            return
+        }
+        CaptureState.NONE -> {
+            // Proceed to render ProductScreen normally
+        }
+    }
 
     when (val state = apiState) {
         is ApiState.Success -> {
@@ -89,9 +145,12 @@ fun ProductScreen(
                         product = product,
                         verdictColor = verdictColor,
                         onScanAnother = onScanAnother,
-                        scrollState = scrollState
+                        scrollState = scrollState,
+                        onRequestCamera = { captureState = CaptureState.PRODUCT_FRONT },
+                        capturedOcrText = capturedOcrText,
+                        isProcessingOCR = isProcessingOCR
                     ) { newName, newIngredients ->
-                        viewModel.contribute(viewModel.lastScannedBarcode, newName, newIngredients)
+                        viewModel.contribute(viewModel.lastScannedBarcode, newName, newIngredients, productImageBase64)
                     }
                 }
 
@@ -297,8 +356,11 @@ fun ProductScreen(
         ProductNotFoundScreen(
             errorMessage = state.message,
             onScanAnother = onScanAnother,
+            onRequestCamera = { captureState = CaptureState.PRODUCT_FRONT },
+            capturedOcrText = capturedOcrText,
+            isProcessingOCR = isProcessingOCR,
             onContribute = { name, ingredients ->
-                viewModel.contribute(viewModel.lastScannedBarcode, name, ingredients)
+                viewModel.contribute(viewModel.lastScannedBarcode, name, ingredients, productImageBase64)
             }
         )
     }
@@ -314,34 +376,23 @@ fun ProductScreen(
 private fun ProductNotFoundScreen(
     errorMessage: String, 
     onScanAnother: () -> Unit,
+    onRequestCamera: () -> Unit,
+    capturedOcrText: String,
+    isProcessingOCR: Boolean,
     onContribute: (String, String) -> Unit
 ) {
     val colors = LocalAppColors.current
     
-    // State for OCR and Contribution Dialog
+    // State for Contribution Dialog
     var showDialog by remember { mutableStateOf(false) }
-    var ocrText by remember { mutableStateOf("") }
+    var ocrText by remember { mutableStateOf(capturedOcrText) }
     var productName by remember { mutableStateOf("") }
-    var isProcessing by remember { mutableStateOf(false) }
 
-    // ML Kit Text Recognition Launcher
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
-        if (bitmap != null) {
-            isProcessing = true
-            val image = InputImage.fromBitmap(bitmap, 0)
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    val text = visionText.text
-                    // Clean up newlines to commas
-                    ocrText = text.replace("\n", ", ")
-                    isProcessing = false
-                    showDialog = true
-                }
-                .addOnFailureListener {
-                    isProcessing = false
-                    showDialog = true // Show anyway so they can type manually
-                }
+    // When OCR text updates from parent camera, update local and show dialog
+    LaunchedEffect(capturedOcrText) {
+        if (capturedOcrText.isNotEmpty()) {
+            ocrText = capturedOcrText
+            showDialog = true
         }
     }
 
@@ -390,11 +441,11 @@ private fun ProductNotFoundScreen(
                     .fillMaxWidth()
                     .height(56.dp)
                     .clip(RoundedCornerShape(28.dp))
-                    .background(if (isProcessing) colors.card else colors.accentBlue)
-                    .clickable(enabled = !isProcessing) { cameraLauncher.launch(null) },
+                    .background(if (isProcessingOCR) colors.card else colors.accentBlue)
+                    .clickable(enabled = !isProcessingOCR) { onRequestCamera() },
                 contentAlignment = Alignment.Center
             ) {
-                if (isProcessing) {
+                if (isProcessingOCR) {
                     androidx.compose.material3.CircularProgressIndicator(
                         color = colors.accentBlue,
                         modifier = Modifier.size(24.dp)
@@ -406,6 +457,11 @@ private fun ProductNotFoundScreen(
                     ) {
                         Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = colors.background, modifier = Modifier.size(20.dp))
                                 Text("Take a Photo of the Product Label", color = colors.background, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
+            }
+        }
+    }
 
     // Contribution Dialog
     if (showDialog) {
@@ -487,6 +543,9 @@ private fun ProductHero(
     verdictColor: Color,
     onScanAnother: () -> Unit,
     scrollState: LazyListState,
+    onRequestCamera: () -> Unit,
+    capturedOcrText: String,
+    isProcessingOCR: Boolean,
     onContribute: (String, String) -> Unit
 ) {
     val colors = LocalAppColors.current
@@ -580,26 +639,12 @@ private fun ProductHero(
                 Spacer(Modifier.height(4.dp))
             }
             var showRenameDialog by remember { mutableStateOf(false) }
-            var isProcessing by remember { mutableStateOf(false) }
-            var ocrText by remember { mutableStateOf("") }
+            var ocrText by remember { mutableStateOf(capturedOcrText) }
             var newName by remember { mutableStateOf(if (product.name == "Unknown Product") "" else product.name ?: "") }
 
-            val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
-                if (bitmap != null) {
-                    isProcessing = true
-                    val image = InputImage.fromBitmap(bitmap, 0)
-                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                    recognizer.process(image)
-                        .addOnSuccessListener { visionText ->
-                            ocrText = visionText.text.replace("\n", ", ")
-                            isProcessing = false
-                            showRenameDialog = true
-                        }
-                        .addOnFailureListener {
-                            isProcessing = false
-                            showRenameDialog = true
-                        }
-                } else {
+            LaunchedEffect(capturedOcrText) {
+                if (capturedOcrText.isNotEmpty()) {
+                    ocrText = capturedOcrText
                     showRenameDialog = true
                 }
             }
@@ -625,10 +670,10 @@ private fun ProductHero(
                             .size(32.dp)
                             .clip(CircleShape)
                             .background(colors.accentBlue.copy(alpha = 0.2f))
-                            .clickable { cameraLauncher.launch(null) }, // Launch camera instead of just opening dialog!
+                            .clickable { onRequestCamera() }, 
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isProcessing) {
+                        if (isProcessingOCR) {
                             androidx.compose.material3.CircularProgressIndicator(
                                 color = colors.accentBlue,
                                 modifier = Modifier.size(16.dp),
@@ -1358,5 +1403,4 @@ private fun NonFoodCard(modifier: Modifier = Modifier) {
             )
         }
     }
-}
 }

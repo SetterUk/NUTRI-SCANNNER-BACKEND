@@ -40,7 +40,8 @@ data class AuthResponse(
 )
 data class ContributeRequest(
     @SerializedName("name") val name: String,
-    @SerializedName("ingredients_text") val ingredientsText: String
+    @SerializedName("ingredients_text") val ingredientsText: String,
+    @SerializedName("image_base64") val imageBase64: String? = null
 )
 data class UserProfileResponse(
     val age: Int?,
