@@ -516,7 +516,7 @@ private fun ProductNotFoundScreen(
             confirmButton = {
                 androidx.compose.material3.TextButton(
                     onClick = {
-                        if (productName.isNotBlank() && ocrText.isNotBlank()) {
+                        if (productName.isNotBlank()) {
                             onContribute(productName, ocrText)
                             showDialog = false
                         }
@@ -566,7 +566,11 @@ private fun ProductHero(
         // Background: image or coloured gradient
             SubcomposeAsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(product.imageUrl)
+                    .data(if (product.imageUrl?.startsWith("/") == true) {
+                        com.example.healthheatv2.network.RetrofitClient.BASE_URL.dropLast(1) + product.imageUrl
+                    } else {
+                        product.imageUrl
+                    })
                     .crossfade(true)
                     .build(),
                 contentDescription = "Product",

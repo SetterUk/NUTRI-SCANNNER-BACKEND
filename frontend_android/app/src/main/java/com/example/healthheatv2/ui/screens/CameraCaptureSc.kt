@@ -76,6 +76,7 @@ private fun CameraPreviewContent(
     
     val cameraController = remember {
         LifecycleCameraController(context).apply {
+            cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA
             bindToLifecycle(lifecycleOwner)
         }
     }
