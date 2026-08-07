@@ -137,6 +137,7 @@ private fun CameraPreviewContent(
                     .clickable {
                         isFlashOn = !isFlashOn
                         cameraController.enableTorch(isFlashOn)
+                        cameraController.imageCaptureFlashMode = if (isFlashOn) androidx.camera.core.ImageCapture.FLASH_MODE_ON else androidx.camera.core.ImageCapture.FLASH_MODE_OFF
                     },
                 contentAlignment = Alignment.Center
             ) {
