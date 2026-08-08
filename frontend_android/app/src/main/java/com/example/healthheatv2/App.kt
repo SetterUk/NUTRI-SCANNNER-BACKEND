@@ -12,8 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,6 +60,10 @@ sealed class Screen(val route: String) {
     object DetailedNutrition : Screen("detailed_nutrition")
     object Profile : Screen("profile")
     object Onboarding : Screen("onboarding")
+    object FoodGuide : Screen("food_guide")
+    object FoodGuideDetail : Screen("food_guide_detail/{foodId}") {
+        fun createRoute(foodId: String) = "food_guide_detail/$foodId"
+    }
 }
 
 data class BottomNavItem(
@@ -111,6 +117,7 @@ fun App(modifier: Modifier = Modifier) {
 
         val bottomNavItems = listOf(
             BottomNavItem("Home", Screen.SearchHub.route, Icons.Filled.Home, Icons.Outlined.Home),
+            BottomNavItem("Purity", Screen.FoodGuide.route, Icons.Filled.Science, Icons.Outlined.Science),
             BottomNavItem("History", Screen.History.route, Icons.Filled.History, Icons.Outlined.History)
         )
 
@@ -119,6 +126,7 @@ fun App(modifier: Modifier = Modifier) {
 
         val showBottomBar = currentRoute in listOf(
             Screen.SearchHub.route,
+            Screen.FoodGuide.route,
             Screen.History.route
         )
 
@@ -248,6 +256,23 @@ fun App(modifier: Modifier = Modifier) {
                     }
                     ProfileScreen(
                         authViewModel = authViewModel,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.FoodGuide.route) {
+                    FoodGuideListScreen(
+                        onFoodSelected = { foodId ->
+                            navController.navigate(Screen.FoodGuideDetail.createRoute(foodId))
+                        },
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.FoodGuideDetail.route) { backStackEntry ->
+                    val foodId = backStackEntry.arguments?.getString("foodId") ?: ""
+                    FoodGuideDetailScreen(
+                        foodId = foodId,
                         onBackClick = { navController.popBackStack() }
                     )
                 }
