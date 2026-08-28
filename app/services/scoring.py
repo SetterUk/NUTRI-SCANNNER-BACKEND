@@ -43,6 +43,9 @@ class ScoringResult:
     data_confidence: float
     category_group: str
     alcohol_capped: bool = False
+    glycemic_load: float = 0.0
+    allergens: list = field(default_factory=list)
+    allergen_warnings: list = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +92,44 @@ def detect_category_group(categories: Optional[str]) -> str:
         if any(k in cat for k in keywords):
             return group
     return "general"
+
+
+# ---------------------------------------------------------------------------
+# Glycemic Load & Allergen Detection
+# ---------------------------------------------------------------------------
+
+def calculate_glycemic_load(carbs_per_100g: float, gi_estimate: int) -> float:
+    return (carbs_per_100g * gi_estimate) / 100
+
+def get_gi_estimate(food_name: str, group: str) -> int:
+    name_lower = (food_name or "").lower()
+    if any(x in name_lower for x in ["sugar", "candy", "sweet"]): return 100
+    if any(x in name_lower for x in ["bread", "white rice", "pasta"]): return 75
+    if any(x in name_lower for x in ["oats", "whole grain", "brown rice"]): return 55
+    if group == "whole_foods": return 40
+    if group == "dairy": return 30
+    return 50 # Default average
+
+COMMON_ALLERGENS = {
+    "milk": ["milk", "lactose", "whey", "casein", "buttermilk", "ghee", "paneer"],
+    "peanuts": ["peanut", "groundnut", "monkey nuts"],
+    "tree_nuts": ["almonds", "cashew", "walnut", "pistachio", "hazelnut"],
+    "gluten": ["wheat", "barley", "rye", "gluten", "maida", "suji"],
+    "soy": ["soy", "soybean", "edamame"],
+    "shellfish": ["shrimp", "crab", "lobster", "mussel"],
+    "fish": ["fish", "anchovy", "salmon", "cod"],
+    "sesame": ["sesame", "til"],
+    "mustard": ["mustard"],
+}
+
+def extract_allergens(ingredients_text: str) -> list:
+    detected = []
+    if not ingredients_text: return detected
+    text = ingredients_text.lower()
+    for allergen_category, keywords in COMMON_ALLERGENS.items():
+        if any(keyword in text for keyword in keywords):
+            detected.append(allergen_category)
+    return list(set(detected))
 
 
 # ---------------------------------------------------------------------------
@@ -809,6 +850,23 @@ def compute_health_score(
     all_deductions.extend(p5_ded)
     all_bonuses.extend(p5_bon)
 
+    # ── Hackathon Additions: Glycemic Load & Allergens ─────────────────────
+    carbs = nutrients.get("carbohydrates_100g", 0) or 0
+    gi = get_gi_estimate(product_name, group)
+    gl = calculate_glycemic_load(carbs, gi)
+    
+    # Penalize if GL is very high (above 20 is considered high)
+    if gl > 20.0:
+        gl_penalty = min(10.0, (gl - 20.0) / 2.0)
+        all_deductions.append({
+            "reason": f"High Glycemic Load ({gl:.1f}) — rapid blood sugar spike",
+            "points": -gl_penalty
+        })
+        p1_base -= gl_penalty # apply penalty to macronutrient pillar for now
+
+    detected_allergens = extract_allergens(ingredients_text)
+    allergen_warnings = [f"Contains {a.replace('_', ' ')}" for a in detected_allergens]
+
     # ── Total ───────────────────────────────────────────────────────────────
     raw = p1_base + micro_bonus + p2 + p3 + p4 + p5
 
@@ -863,4 +921,7 @@ def compute_health_score(
         data_confidence=confidence,
         category_group=group,
         alcohol_capped=alcohol_capped,
+        glycemic_load=gl,
+        allergens=detected_allergens,
+        allergen_warnings=allergen_warnings,
     )

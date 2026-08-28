@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +61,7 @@ fun SearchHubScreen(
     onProductSelected: () -> Unit,
     onProfileClick: () -> Unit,
     onLogout: () -> Unit,
+    onAskAIClick: () -> Unit
 ) {
     val colors = LocalAppColors.current
     val history by viewModel.searchHistory
@@ -84,6 +86,8 @@ fun SearchHubScreen(
             .background(colors.background)
     ) {
         // Removed AnimatedAmbientBackground to look more native/less AI-generated
+
+
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

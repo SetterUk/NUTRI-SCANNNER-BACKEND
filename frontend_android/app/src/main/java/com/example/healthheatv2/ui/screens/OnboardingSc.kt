@@ -27,7 +27,12 @@ import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
 import com.example.healthheatv2.network.RetrofitClient
-
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.example.healthheatv2.utils.PdfUtil
+import com.example.healthheatv2.services.calculateBMI
+import com.example.healthheatv2.services.calculateBMR
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
@@ -46,6 +51,7 @@ fun OnboardingScreen(
     var height by remember { mutableStateOf("") }
     var allergies by remember { mutableStateOf("") }
     var healthGoals by remember { mutableStateOf("") }
+    var medicalReports by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("Prefer not to say") }
     var activityLevel by remember { mutableStateOf("Prefer not to say") }
     var selectedDiet by remember { mutableStateOf("None") }
@@ -56,6 +62,22 @@ fun OnboardingScreen(
 
     var isSaving by remember { mutableStateOf(false) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
+    
+    val context = LocalContext.current
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                isSaving = true
+                val text = PdfUtil.extractTextFromPdf(context, uri)
+                if (medicalReports.isBlank()) {
+                    medicalReports = text
+                } else {
+                    medicalReports += "\n\n$text"
+                }
+                isSaving = false
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -451,6 +473,40 @@ fun OnboardingScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Medical Reports (Optional)",
+                                    color = colors.textPrimary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                TextButton(onClick = { pdfLauncher.launch("application/pdf") }) {
+                                    Text("Upload PDF", color = colors.accentBlue, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = medicalReports,
+                                onValueChange = { medicalReports = it },
+                                label = { Text("Paste or Upload Doctor's Notes / Blood Test Results") },
+                                modifier = Modifier.fillMaxWidth().height(140.dp),
+                                maxLines = 6,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = colors.accentBlue,
+                                    unfocusedBorderColor = colors.border,
+                                    focusedTextColor = colors.textPrimary,
+                                    unfocusedTextColor = colors.textPrimary,
+                                    cursorColor = colors.accentBlue
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
                             Spacer(modifier = Modifier.height(48.dp))
 
                             if (saveMessage != null) {
@@ -484,6 +540,19 @@ fun OnboardingScreen(
                                             profileData["gender"] = if (gender == "Prefer not to say") "" else gender
                                             profileData["activity_level"] = if (activityLevel == "Prefer not to say") "" else activityLevel
                                             if (healthGoals.isNotBlank()) profileData["health_goals"] = healthGoals
+                                            if (medicalReports.isNotBlank()) profileData["medical_reports"] = medicalReports
+                                            
+                                            // Calculate BMI and BMR
+                                            val hCm = height.toFloatOrNull() ?: 0f
+                                            val wKg = weight.toFloatOrNull() ?: 0f
+                                            val ageYrs = age.toIntOrNull() ?: 0
+                                            if (hCm > 0f && wKg > 0f) {
+                                                profileData["bmi"] = calculateBMI(hCm, wKg)
+                                                if (ageYrs > 0) {
+                                                    val isMale = gender == "Male" || gender == "Prefer not to say" // default to male formula if unknown for demo
+                                                    profileData["bmr"] = calculateBMR(ageYrs, isMale, hCm, wKg)
+                                                }
+                                            }
 
                                             RetrofitClient.apiService.updateProfile(profileData)
                                             authViewModel.fetchProfile()

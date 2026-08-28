@@ -139,7 +139,7 @@ async def scan_product(
     barcode: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     print(f"DEBUG: Received scan request for {barcode}")
     # Fetch user profile for personalization if user is authenticated
@@ -496,3 +496,28 @@ async def update_profile(
     await session.commit()
     await session.refresh(profile)
     return {"status": "success", "message": "Profile updated successfully"}
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+
+@router.post("/chat")
+@limiter.limit("20/minute")
+async def chat_with_nutritionist(
+    request: Request,
+    data: ChatRequest
+):
+    from app.core.groq_manager import groq_manager
+    client = groq_manager.get_best_client()
+    try:
+        response = await client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": m.role, "content": m.content} for m in data.messages]
+        )
+        return {"response": response.choices[0].message.content}
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail="Error generating response")

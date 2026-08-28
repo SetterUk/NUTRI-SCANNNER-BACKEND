@@ -53,7 +53,10 @@ data class UserProfileResponse(
     @SerializedName("health_goals") val healthGoals: String?,
     val allergies: List<String>? = emptyList(),
     @SerializedName("health_tags") val healthTags: List<String>? = emptyList(),
-    @SerializedName("preferred_name") val preferredName: String? = null
+    @SerializedName("preferred_name") val preferredName: String? = null,
+    @SerializedName("medical_reports") val medicalReports: String? = null,
+    val bmi: Float? = null,
+    val bmr: Float? = null
 )
 data class FoodResponse(
     @SerializedName("verdict") val verdict: String?,
@@ -92,6 +95,20 @@ data class FoodResponse(
     @SerializedName("alternatives") val alternatives: List<AlternativeProduct>?,
     @SerializedName("verdict_color") val verdictColor: String?
 )
+
+data class ApiChatMessage(
+    @SerializedName("role") val role: String,
+    @SerializedName("content") val content: String
+)
+
+data class ChatRequest(
+    @SerializedName("messages") val messages: List<ApiChatMessage>
+)
+
+data class ChatResponse(
+    @SerializedName("response") val response: String
+)
+
 interface ApiService {
     // 1. Changed to @POST
     // 2. The {barcode} in the path matches the @Path variable below
@@ -118,6 +135,9 @@ interface ApiService {
         @Path("barcode") barcode: String,
         @Body data: ContributeRequest
     )
+
+    @POST("/api/chat")
+    suspend fun chat(@Body request: ChatRequest): ChatResponse
 }
 
 // 3. Create the Retrofit Singleton

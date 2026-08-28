@@ -75,6 +75,7 @@ enum class CaptureState { NONE, PRODUCT_FRONT, PRODUCT_LABEL }
 @Composable
 fun ProductScreen(
     viewModel: ScannerViewModel,
+    nutritionEngine: com.example.healthheatv2.services.NutritionEngine,
     onScanAnother: () -> Unit,
     onViewDetails: () -> Unit,
 ) {
@@ -85,6 +86,9 @@ fun ProductScreen(
     var productImageBase64 by remember { mutableStateOf<String?>(null) }
     var capturedOcrText by remember { mutableStateOf("") }
     var isProcessingOCR by remember { mutableStateOf(false) }
+
+    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
+    val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     when (captureState) {
         CaptureState.PRODUCT_FRONT -> {
@@ -128,14 +132,12 @@ fun ProductScreen(
     when (val state = apiState) {
         is ApiState.Success -> {
             val product = state.data
-        val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
-        val score = product.healthScore ?: 0
-        val isSmash = score >= smashThreshold
-        val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
+            val score = product.healthScore ?: 0
+            val personalScore = nutritionEngine.calculatePersonalScore(score, product.ingredientsText, product.categories)
+            val isSmash = personalScore >= smashThreshold
+            val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
 
-        val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
-
-        Box(
+            Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(colors.background),
@@ -181,11 +183,13 @@ fun ProductScreen(
                                 modifier = Modifier.weight(1.1f),
                                 product = product,
                                 verdictColor = verdictColor,
-                                isSmash = isSmash
+                                isSmash = isSmash,
+                                generalScore = score,
+                                personalScore = personalScore
                             )
                             ScoreGauge(
                                 modifier = Modifier.weight(0.9f),
-                                score = product.healthScore ?: 0,
+                                score = personalScore,
                                 onClick = onViewDetails
                             )
                         }
@@ -771,7 +775,9 @@ private fun VerdictCard(
     modifier: Modifier,
     product: FoodResponse,
     verdictColor: Color,
-    isSmash: Boolean
+    isSmash: Boolean,
+    generalScore: Int,
+    personalScore: Int
 ) {
     val colors = LocalAppColors.current
 
@@ -787,7 +793,7 @@ private fun VerdictCard(
         Text("VERDICT", color = colors.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
         Spacer(Modifier.height(12.dp))
         Text(
-            text = if (isSmash) "SMASH" else "PASS",
+            text = if (isSmash) "FIT" else "AVOID",
             color = verdictColor,
             fontSize = 34.sp,
             fontWeight = FontWeight.ExtraBold,
@@ -801,8 +807,17 @@ private fun VerdictCard(
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = if (isSmash) "✓ Eat it!" else "✗ Avoid",
-                color = verdictColor,
+                "General Score: $generalScore", 
+                color = colors.textSecondary, 
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        if (personalScore < generalScore) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Personal Score: $personalScore (Flagged for allergies/diet)",
+                color = colors.accentRed,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )

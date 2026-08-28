@@ -26,6 +26,7 @@ class ScannerViewModel(private val repository: ProductRepository) : ViewModel() 
     val searchHistory: State<List<ProductCacheEntity>> = _searchHistory
 
     var lastScannedBarcode: String = ""
+    var selectedGap: com.example.healthheatv2.services.NutritionGap? = null
 
     init {
         refreshHistory()

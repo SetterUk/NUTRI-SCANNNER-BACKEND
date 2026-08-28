@@ -12,23 +12,29 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,7 +46,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.healthheatv2.data.AppDatabase
 import com.example.healthheatv2.data.ProductRepository
 import com.example.healthheatv2.network.RetrofitClient
 import com.example.healthheatv2.ui.screens.*
@@ -56,11 +61,13 @@ sealed class Screen(val route: String) {
     object Scanner : Screen("scanner")
     object ManualSearch : Screen("manual_search")
     object Product : Screen("product")
+    object FixMyNutrition : Screen("fix_my_nutrition")
     object History : Screen("history")
     object DetailedNutrition : Screen("detailed_nutrition")
     object Profile : Screen("profile")
     object Onboarding : Screen("onboarding")
     object FoodGuide : Screen("food_guide")
+    object NutritionistChat : Screen("nutritionist_chat")
     object FoodGuideDetail : Screen("food_guide_detail/{foodId}") {
         fun createRoute(foodId: String) = "food_guide_detail/$foodId"
     }
@@ -88,9 +95,10 @@ fun App(modifier: Modifier = Modifier) {
     AppTheme(isDark = isDark) {
         val colors = LocalAppColors.current
 
-        val database = AppDatabase.getDatabase(context)
+        val userDatabase = com.example.healthheatv2.data.UserDatabase.getDatabase(context)
+        val foodDatabase = com.example.healthheatv2.data.FoodDatabaseHelper(context)
         val repository = ProductRepository(
-            productDao = database.productDao(),
+            productDao = userDatabase.productDao(),
             apiService = RetrofitClient.apiService
         )
 
@@ -118,6 +126,7 @@ fun App(modifier: Modifier = Modifier) {
         val bottomNavItems = listOf(
             BottomNavItem("Home", Screen.SearchHub.route, Icons.Filled.Home, Icons.Outlined.Home),
             BottomNavItem("Purity", Screen.FoodGuide.route, Icons.Filled.Science, Icons.Outlined.Science),
+            BottomNavItem("Nutribot", Screen.NutritionistChat.route, Icons.Filled.SmartToy, Icons.Outlined.SmartToy),
             BottomNavItem("History", Screen.History.route, Icons.Filled.History, Icons.Outlined.History)
         )
 
@@ -127,6 +136,7 @@ fun App(modifier: Modifier = Modifier) {
         val showBottomBar = currentRoute in listOf(
             Screen.SearchHub.route,
             Screen.FoodGuide.route,
+            Screen.NutritionistChat.route,
             Screen.History.route
         )
 
@@ -164,6 +174,27 @@ fun App(modifier: Modifier = Modifier) {
                 }
 
                 composable(Screen.SearchHub.route) {
+                    val profile = userProfile
+                    var nutritionEngine: com.example.healthheatv2.services.NutritionEngine? = null
+                    if (profile != null) {
+                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
+                            age = profile.age ?: 25,
+                            sex = profile.gender ?: "Other",
+                            heightCm = profile.height?.toFloat() ?: 170f,
+                            weightKg = profile.weightKg?.toFloat() ?: 70f,
+                            activityLevel = profile.activityLevel ?: "sedentary",
+                            primaryGoal = profile.healthGoals ?: "general_health",
+                            secondaryGoals = emptyList(),
+                            dietType = profile.dietaryPreferences ?: "omnivore",
+                            allergies = profile.allergies ?: emptyList(),
+                            dietaryRestrictions = emptyList(),
+                            dislikedFoods = emptyList(),
+                            preferredCuisines = emptyList(),
+                            healthTags = profile.healthTags ?: emptyList()
+                        )
+                        nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                    }
+
                     SearchHubScreen(
                         viewModel = scannerViewModel,
                         authViewModel = authViewModel,
@@ -183,8 +214,48 @@ fun App(modifier: Modifier = Modifier) {
                             navController.navigate(Screen.Auth.route) {
                                 popUpTo(0) { inclusive = true }
                             }
-                        }
+                        },
+                        onAskAIClick = { navController.navigate(Screen.NutritionistChat.route) }
                     )
+                }
+
+                composable(Screen.NutritionistChat.route) {
+                    val profile = userProfile
+                    if (profile != null) {
+                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
+                            age = profile.age ?: 25,
+                            sex = profile.gender ?: "Other",
+                            heightCm = profile.height?.toFloat() ?: 170f,
+                            weightKg = profile.weightKg?.toFloat() ?: 70f,
+                            activityLevel = profile.activityLevel ?: "sedentary",
+                            primaryGoal = profile.healthGoals ?: "general_health",
+                            secondaryGoals = emptyList(),
+                            dietType = profile.dietaryPreferences?.firstOrNull()?.toString() ?: "omnivore",
+                            allergies = profile.allergies ?: emptyList(),
+                            dietaryRestrictions = emptyList(),
+                            dislikedFoods = emptyList(),
+                            preferredCuisines = emptyList(),
+                            healthTags = profile.healthTags ?: emptyList()
+                        )
+                        val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                        val coach = remember(mappedProfile) { 
+                            com.example.healthheatv2.ai.LocalNutritionistCoach(context, mappedProfile) 
+                        }
+                        com.example.healthheatv2.ui.screens.NutritionistChatScreen(
+                            coach = coach,
+                            userProfile = mappedProfile,
+                            nutritionEngine = nutritionEngine,
+                            onFixMyNutritionClick = { gap ->
+                                scannerViewModel.selectedGap = gap
+                                navController.navigate(Screen.FixMyNutrition.route)
+                            },
+                            onBackClick = { navController.popBackStack() }
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
                 }
 
                 composable(Screen.ManualSearch.route) {
@@ -211,16 +282,69 @@ fun App(modifier: Modifier = Modifier) {
                 }
 
                 composable(Screen.Product.route) {
-                    ProductScreen(
-                        viewModel = scannerViewModel,
-                        onScanAnother = {
-                            scannerViewModel.resetState()
-                            navController.popBackStack(Screen.SearchHub.route, inclusive = false)
-                        },
-                        onViewDetails = {
-                            navController.navigate(Screen.DetailedNutrition.route)
+                    val profile = userProfile
+                    if (profile != null) {
+                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
+                            age = profile.age ?: 25,
+                            sex = profile.gender ?: "Other",
+                            heightCm = profile.height?.toFloat() ?: 170f,
+                            weightKg = profile.weightKg?.toFloat() ?: 70f,
+                            activityLevel = profile.activityLevel ?: "sedentary",
+                            primaryGoal = profile.healthGoals ?: "general_health",
+                            secondaryGoals = emptyList(),
+                            dietType = profile.dietaryPreferences ?: "omnivore",
+                            allergies = profile.allergies ?: emptyList(),
+                            dietaryRestrictions = emptyList(),
+                            dislikedFoods = emptyList(),
+                            preferredCuisines = emptyList(),
+                            healthTags = profile.healthTags ?: emptyList()
+                        )
+                        val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                        ProductScreen(
+                            viewModel = scannerViewModel,
+                            nutritionEngine = nutritionEngine,
+                            onScanAnother = {
+                                scannerViewModel.resetState()
+                                navController.popBackStack(Screen.SearchHub.route, inclusive = false)
+                            },
+                            onViewDetails = {
+                                navController.navigate(Screen.DetailedNutrition.route)
+                            }
+                        )
+                    } else {
+                        // Fallback or loading state
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            androidx.compose.material3.CircularProgressIndicator()
                         }
-                    )
+                    }
+                }
+
+                composable(Screen.FixMyNutrition.route) {
+                    val gap = scannerViewModel.selectedGap
+                    val profile = userProfile
+                    if (gap != null && profile != null) {
+                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
+                            age = profile.age ?: 25,
+                            sex = profile.gender ?: "Other",
+                            heightCm = profile.height?.toFloat() ?: 170f,
+                            weightKg = profile.weightKg?.toFloat() ?: 70f,
+                            activityLevel = profile.activityLevel ?: "sedentary",
+                            primaryGoal = profile.healthGoals ?: "general_health",
+                            secondaryGoals = emptyList(),
+                            dietType = profile.dietaryPreferences ?: "omnivore",
+                            allergies = profile.allergies ?: emptyList(),
+                            dietaryRestrictions = emptyList(),
+                            dislikedFoods = emptyList(),
+                            preferredCuisines = emptyList(),
+                            healthTags = profile.healthTags ?: emptyList()
+                        )
+                        val recEngine = com.example.healthheatv2.services.RecommendationEngine(foodDatabase, mappedProfile)
+                        FixMyNutritionSc(
+                            gap = gap,
+                            recommendationEngine = recEngine,
+                            onBackClick = { navController.popBackStack() }
+                        )
+                    }
                 }
 
                 composable(Screen.History.route) {
@@ -279,7 +403,8 @@ fun App(modifier: Modifier = Modifier) {
             }
 
             // Bottom nav bar floating above content
-            if (showBottomBar) {
+            val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+            if (showBottomBar && !isImeVisible) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)

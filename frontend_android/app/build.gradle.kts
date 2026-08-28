@@ -50,6 +50,12 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion") // For Coroutines support
     kapt("androidx.room:room-compiler:$roomVersion")
     
+    // MediaPipe for Local LLM
+    implementation("com.google.mediapipe:tasks-genai:0.10.11")
+
+    // PDF Parsing
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

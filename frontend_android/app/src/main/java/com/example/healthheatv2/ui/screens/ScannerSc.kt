@@ -85,7 +85,7 @@ private fun CameraPreviewWithOverlay(
     var lastDetectedBarcode by remember { mutableStateOf("") }
 
     LaunchedEffect(apiState) {
-        if (apiState is ApiState.Success || apiState is ApiState.Error) onScanSuccess()
+        if (apiState is ApiState.Success) onScanSuccess()
     }
 
     var isFlashOn by remember { mutableStateOf(false) }
