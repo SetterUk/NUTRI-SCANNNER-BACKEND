@@ -238,11 +238,16 @@ fun App(modifier: Modifier = Modifier) {
                             healthTags = profile.healthTags ?: emptyList()
                         )
                         val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
-                        val coach = remember(mappedProfile) { 
-                            com.example.healthheatv2.ai.LocalNutritionistCoach(context, mappedProfile) 
+                        val nanoCoach = remember(mappedProfile) { 
+                            com.example.healthheatv2.ai.NanoNutritionistCoach(context, userDatabase.nutritionDao()) 
                         }
+                        val voiceCoach = remember(mappedProfile) {
+                            com.example.healthheatv2.ai.VoiceNutritionistCoach(context, nanoCoach)
+                        }
+                        
                         com.example.healthheatv2.ui.screens.NutritionistChatScreen(
-                            coach = coach,
+                            voiceCoach = voiceCoach,
+                            nanoCoach = nanoCoach,
                             userProfile = mappedProfile,
                             nutritionEngine = nutritionEngine,
                             onFixMyNutritionClick = { gap ->

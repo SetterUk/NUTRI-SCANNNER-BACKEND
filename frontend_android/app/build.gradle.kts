@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.healthheatv2"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.1"
@@ -50,8 +50,9 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion") // For Coroutines support
     kapt("androidx.room:room-compiler:$roomVersion")
     
-    // MediaPipe for Local LLM
-    implementation("com.google.mediapipe:tasks-genai:0.10.11")
+    // AICore for On-Device Gemini Nano
+    implementation("com.google.ai.edge.aicore:aicore:0.0.1-exp02")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.7.3")
 
     // PDF Parsing
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")

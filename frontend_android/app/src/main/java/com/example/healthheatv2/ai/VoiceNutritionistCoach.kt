@@ -13,7 +13,7 @@ import java.util.Locale
 
 class VoiceNutritionistCoach(
     private val context: Context,
-    private val textCoach: LocalNutritionistCoach
+    private val textCoach: NanoNutritionistCoach
 ) {
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
@@ -56,14 +56,14 @@ class VoiceNutritionistCoach(
         speechRecognizer?.startListening(intent)
     }
 
-    suspend fun chatWithVoice(userSpeech: String): String = withContext(Dispatchers.Default) {
+    suspend fun chatWithVoice(chatHistory: List<com.example.healthheatv2.ui.screens.ChatMessage>, userProfile: com.example.healthheatv2.data.UserProfile): String = withContext(Dispatchers.Default) {
         // Get text response from coach
-        val response = textCoach.chat(userSpeech)
+        val aiTextResponse = textCoach.generateNutriBotResponse(chatHistory, userProfile)
         
-        // Convert to speech
-        textToSpeech?.speak(response, TextToSpeech.QUEUE_FLUSH, null, "ChatResponseId")
+        // Speak the responseech
+        textToSpeech?.speak(aiTextResponse, TextToSpeech.QUEUE_FLUSH, null, "ChatResponseId")
         
-        return@withContext response
+        return@withContext aiTextResponse
     }
 
     fun stop() {

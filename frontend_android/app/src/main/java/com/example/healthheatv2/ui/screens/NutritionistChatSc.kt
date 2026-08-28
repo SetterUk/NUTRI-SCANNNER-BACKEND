@@ -17,8 +17,10 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.google.accompanist.permissions.isGranted
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,7 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.healthheatv2.ai.LocalNutritionistCoach
+import com.example.healthheatv2.ai.NanoNutritionistCoach
 import com.example.healthheatv2.data.UserProfile
 import com.example.healthheatv2.services.NutritionEngine
 import com.example.healthheatv2.services.NutritionGap
@@ -39,7 +41,8 @@ data class ChatMessage(val text: String, val isUser: Boolean)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NutritionistChatScreen(
-    coach: LocalNutritionistCoach,
+    nanoCoach: NanoNutritionistCoach,
+    voiceCoach: com.example.healthheatv2.ai.VoiceNutritionistCoach,
     userProfile: UserProfile,
     nutritionEngine: NutritionEngine,
     onFixMyNutritionClick: (NutritionGap) -> Unit,
@@ -106,7 +109,7 @@ fun NutritionistChatScreen(
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
             ) {
-                ChatInputBar(coach)
+                ChatInputBar(nanoCoach, voiceCoach, userProfile, nutritionEngine)
             }
         }
     ) { paddingValues ->
@@ -140,7 +143,7 @@ fun NutritionistChatScreen(
                     }
                     1 -> {
                         // Chat Content
-                        ChatContent(coach = coach)
+                        ChatContent(coach = nanoCoach)
                     }
                 }
             }
@@ -176,7 +179,7 @@ private val sharedChatMessages = mutableStateListOf<ChatMessage>()
 private var hasInitializedChat = false
 
 @Composable
-private fun ChatContent(coach: LocalNutritionistCoach) {
+private fun ChatContent(coach: NanoNutritionistCoach) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) {
@@ -210,10 +213,12 @@ private fun ChatContent(coach: LocalNutritionistCoach) {
     }
 }
 
+@OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
 @Composable
-private fun ChatInputBar(coach: LocalNutritionistCoach) {
+private fun ChatInputBar(nanoCoach: NanoNutritionistCoach, voiceCoach: com.example.healthheatv2.ai.VoiceNutritionistCoach, userProfile: UserProfile, nutritionEngine: NutritionEngine) {
     var inputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    var isListening by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val colors = LocalAppColors.current
 
@@ -272,8 +277,21 @@ private fun ChatInputBar(coach: LocalNutritionistCoach) {
                                 isLoading = true
                                 scope.launch {
                                     try {
-                                        val response = coach.chat(userMsg)
-                                        sharedChatMessages.add(ChatMessage(response, false))
+                                        val response = nanoCoach.generateNutriBotResponse(sharedChatMessages.toList(), userProfile)
+                                        val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
+                                        val match = logFoodRegex.find(response)
+                                        var finalResponse = response
+                                        if (match != null) {
+                                            val foodName = match.groupValues[1]
+                                            finalResponse = finalResponse.replace(match.value, "").trim()
+                                            val success = nutritionEngine.searchAndLogFood(foodName)
+                                            if (success) {
+                                                finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
+                                            } else {
+                                                finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
+                                            }
+                                        }
+                                        sharedChatMessages.add(ChatMessage(finalResponse, false))
                                     } catch (e: Exception) {
                                         sharedChatMessages.add(ChatMessage("Error generating response.", false))
                                     } finally {
@@ -293,6 +311,66 @@ private fun ChatInputBar(coach: LocalNutritionistCoach) {
                                 modifier = Modifier.size(18.dp)
                             )
                         }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Microphone Button
+                    val micPermissionState = com.google.accompanist.permissions.rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (isListening) Color.Red else colors.surface)
+                            .clickable(enabled = !isLoading && !isListening) {
+                                if (!micPermissionState.status.isGranted) {
+                                    micPermissionState.launchPermissionRequest()
+                                } else {
+                                    isListening = true
+                                    voiceCoach.startVoiceInput(
+                                        onResult = { result ->
+                                        isListening = false
+                                        val userMsg = result
+                                        sharedChatMessages.add(ChatMessage(userMsg, true))
+                                        isLoading = true
+                                        scope.launch {
+                                            try {
+                                                val response = voiceCoach.chatWithVoice(sharedChatMessages.toList(), userProfile)
+                                                val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
+                                                val match = logFoodRegex.find(response)
+                                                var finalResponse = response
+                                                if (match != null) {
+                                                    val foodName = match.groupValues[1]
+                                                    finalResponse = finalResponse.replace(match.value, "").trim()
+                                                    val success = nutritionEngine.searchAndLogFood(foodName)
+                                                    if (success) {
+                                                        finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
+                                                    } else {
+                                                        finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
+                                                    }
+                                                }
+                                                sharedChatMessages.add(ChatMessage(finalResponse, false))
+                                            } catch (e: Exception) {
+                                                sharedChatMessages.add(ChatMessage("Error generating response.", false))
+                                            } finally {
+                                                isLoading = false
+                                            }
+                                        }
+                                    },
+                                    onError = { errorMsg ->
+                                        isListening = false
+                                        sharedChatMessages.add(ChatMessage("Voice Error: $errorMsg", false))
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.Mic, 
+                            contentDescription = "Mic", 
+                            tint = if (isListening) Color.White else colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }

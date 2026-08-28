@@ -143,6 +143,26 @@ class NutritionEngine(
         return aggregateMealNutrition(todayMeals)
     }
 
+    suspend fun searchAndLogFood(foodName: String): Boolean {
+        val food = db.nutritionDao().searchFoodByName(foodName) ?: return false
+        val meal = LoggedMeal(
+            date = System.currentTimeMillis(),
+            mealSlot = "snack",
+            foodId = food.id,
+            foodName = food.food_name,
+            quantity = 1f,
+            unit = food.portion_size,
+            calories = food.energy_kcal,
+            protein = food.protein_g,
+            carbs = food.carbs_g,
+            fat = 0f, // Not present in IFCTFood entity
+            fiber = 0f,
+            iron = 0f, calcium = 0f, zinc = 0f, b12 = 0f, vitaminD = 0f, folate = 0f
+        )
+        db.mealLogDao().insertMeal(meal)
+        return true
+    }
+
     suspend fun calculateGaps(): GapAnalysis {
         val intake = getTodayIntake()
         

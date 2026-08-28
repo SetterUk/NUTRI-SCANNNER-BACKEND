@@ -77,7 +77,7 @@ Return ONLY this JSON with no explanation:
                             "content": prompt
                         }
                     ],
-                    model="llama-3.3-70b-versatile",
+                    model="llama3-70b-8192",
                     response_format={"type": "json_object"},
                     temperature=0,  # deterministic — classification must be consistent
                 )

@@ -163,3 +163,25 @@ data class MealItem(
     val foodOrRecipeId: String?,
     val type: String?
 )
+
+@Entity(tableName = "ICMRRule")
+data class ICMRRule(
+    @PrimaryKey val id: String,
+    val condition_tag: String,
+    val clinical_focus: String,
+    val must_avoid: String,
+    val recommended_swaps: String,
+    val required_tags: String,
+    val banned_tags: String
+)
+
+@Entity(tableName = "IFCTFood")
+data class IFCTFood(
+    @PrimaryKey val id: String,
+    val food_name: String,
+    val portion_size: String,
+    val energy_kcal: Float,
+    val protein_g: Float,
+    val carbs_g: Float,
+    val tags: String
+)

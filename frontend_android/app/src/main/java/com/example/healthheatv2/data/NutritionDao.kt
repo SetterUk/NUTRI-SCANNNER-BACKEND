@@ -26,4 +26,22 @@ interface NutritionDao {
 
     @Query("SELECT * FROM RecipeIngredient WHERE recipeId = :recipeId")
     suspend fun getRecipeIngredients(recipeId: String): List<RecipeIngredient>
+
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertICMRRule(rule: ICMRRule)
+
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertIFCTFood(food: IFCTFood)
+
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertIFCTFoods(foods: List<IFCTFood>)
+
+    @Query("SELECT * FROM IFCTFood WHERE food_name LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' LIMIT 1")
+    suspend fun searchFoodByName(query: String): IFCTFood?
+
+    @Query("SELECT * FROM ICMRRule WHERE condition_tag = :condition LIMIT 1")
+    suspend fun getICMRRule(condition: String): ICMRRule?
+
+    @Query("SELECT * FROM IFCTFood WHERE energy_kcal <= :deficit AND protein_g >= :minProtein AND tags LIKE '%' || :requiredTag || '%' AND (:bannedTag IS '' OR tags NOT LIKE '%' || :bannedTag || '%') LIMIT 3")
+    suspend fun getEligibleFoods(deficit: Float, minProtein: Float, requiredTag: String, bannedTag: String): List<IFCTFood>
 }

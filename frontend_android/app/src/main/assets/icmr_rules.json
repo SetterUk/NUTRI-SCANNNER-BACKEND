@@ -1,0 +1,112 @@
+{
+  "rules": [
+    {
+      "id": "pcos",
+      "condition_tag": "pcos",
+      "clinical_focus": "Insulin Resistance",
+      "must_avoid": "sugar, refined carbohydrates, white bread, pastries",
+      "recommended_swaps": "complex carbohydrates, fiber-rich foods, oats, quinoa",
+      "required_tags": "low_gi, fiber",
+      "banned_tags": "sugar, refined"
+    },
+    {
+      "id": "diabetes",
+      "condition_tag": "diabetes",
+      "clinical_focus": "Blood Sugar Control",
+      "must_avoid": "sugar, sweets, white rice, fruit juices",
+      "recommended_swaps": "millets, oats, dal, whole grains, leafy greens",
+      "required_tags": "low_gi, high_fiber",
+      "banned_tags": "sugar, high_gi"
+    },
+    {
+      "id": "hypertension",
+      "condition_tag": "hypertension",
+      "clinical_focus": "Blood Pressure Management",
+      "must_avoid": "salt, pickles, papad, processed meats, canned soups",
+      "recommended_swaps": "fresh fruits, vegetables, potassium-rich foods, bananas",
+      "required_tags": "low_sodium, potassium",
+      "banned_tags": "high_sodium, preserved"
+    },
+    {
+      "id": "thyroid_hypo",
+      "condition_tag": "thyroid",
+      "clinical_focus": "Hypothyroidism Function",
+      "must_avoid": "raw cabbage, cauliflower, soy products, gluten (if sensitive)",
+      "recommended_swaps": "cooked vegetables, nuts, seeds, iodine-rich foods",
+      "required_tags": "iodine, selenium, cooked",
+      "banned_tags": "goitrogens, raw_cruciferous"
+    },
+    {
+      "id": "ckd",
+      "condition_tag": "kidney_disease",
+      "clinical_focus": "Renal Function",
+      "must_avoid": "high potassium fruits, high sodium, excess protein, dark colas",
+      "recommended_swaps": "apples, berries, cabbage, low-protein alternatives",
+      "required_tags": "low_potassium, low_sodium, low_phosphorus",
+      "banned_tags": "high_potassium, high_protein"
+    },
+    {
+      "id": "gerd",
+      "condition_tag": "acid_reflux",
+      "clinical_focus": "Gastroesophageal Reflux",
+      "must_avoid": "spicy foods, citrus, tomatoes, caffeine, fried foods",
+      "recommended_swaps": "oatmeal, ginger, lean meats, non-citrus fruits",
+      "required_tags": "alkaline, bland, lean",
+      "banned_tags": "spicy, acidic, fried"
+    },
+    {
+      "id": "celiac",
+      "condition_tag": "gluten_free",
+      "clinical_focus": "Celiac Disease / Gluten Intolerance",
+      "must_avoid": "wheat, barley, rye, maida, semolina (sooji)",
+      "recommended_swaps": "rice, millets (bajra, jowar), quinoa, corn",
+      "required_tags": "gluten_free",
+      "banned_tags": "wheat, gluten"
+    },
+    {
+      "id": "anemia",
+      "condition_tag": "anemia",
+      "clinical_focus": "Iron Deficiency",
+      "must_avoid": "tea or coffee with meals (inhibits iron absorption)",
+      "recommended_swaps": "spinach, jaggery, dates, meat, vitamin C rich foods",
+      "required_tags": "iron, vitamin_c",
+      "banned_tags": "tannins"
+    },
+    {
+      "id": "cholesterol",
+      "condition_tag": "high_cholesterol",
+      "clinical_focus": "Lipid Profile Management",
+      "must_avoid": "trans fats, saturated fats, red meat, full-fat dairy, palm oil",
+      "recommended_swaps": "nuts, seeds, olive oil, fatty fish, soluble fiber (oats)",
+      "required_tags": "healthy_fats, high_fiber, omega_3",
+      "banned_tags": "trans_fat, saturated_fat"
+    },
+    {
+      "id": "uric_acid",
+      "condition_tag": "gout",
+      "clinical_focus": "Uric Acid Reduction",
+      "must_avoid": "red meat, organ meats, shellfish, alcohol, sugary drinks",
+      "recommended_swaps": "cherries, berries, low-fat dairy, complex carbs, lots of water",
+      "required_tags": "low_purine, vitamin_c",
+      "banned_tags": "high_purine, alcohol"
+    },
+    {
+      "id": "liver",
+      "condition_tag": "fatty_liver",
+      "clinical_focus": "Hepatic Steatosis",
+      "must_avoid": "alcohol, added sugars, refined carbs, fried foods",
+      "recommended_swaps": "coffee, greens, tofu, fish, walnuts",
+      "required_tags": "antioxidants, lean_protein",
+      "banned_tags": "alcohol, added_sugar, fried"
+    },
+    {
+      "id": "general",
+      "condition_tag": "healthy",
+      "clinical_focus": "General Wellness",
+      "must_avoid": "excessive ultra-processed foods",
+      "recommended_swaps": "whole foods, balanced macros",
+      "required_tags": "balanced",
+      "banned_tags": "ultra_processed"
+    }
+  ]
+}
