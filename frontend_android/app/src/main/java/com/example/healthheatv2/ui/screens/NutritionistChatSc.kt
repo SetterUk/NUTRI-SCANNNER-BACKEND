@@ -362,6 +362,7 @@ private fun ChatInputBar(nanoCoach: NanoNutritionistCoach, voiceCoach: com.examp
                                         sharedChatMessages.add(ChatMessage("Voice Error: $errorMsg", false))
                                     }
                                 )
+                                } // closes else block
                             },
                         contentAlignment = Alignment.Center
                     ) {
