@@ -8,9 +8,9 @@ import com.example.healthheatv2.data.UserDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.withContext
-import com.google.ai.edge.aicore.AiCore
-import com.google.ai.edge.aicore.AiFeature
-import com.google.ai.edge.aicore.AiFeatureStatus
+// import com.google.ai.edge.aicore.AiCore
+// import com.google.ai.edge.aicore.AiFeature
+// import com.google.ai.edge.aicore.AiFeatureStatus
 import com.google.ai.edge.aicore.GenerativeModel
 
 class NanoNutritionistCoach(
@@ -21,15 +21,15 @@ class NanoNutritionistCoach(
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         try {
-            val aiCore = AiCore.create(context)
-            val status = aiCore.getFeatureStatus(AiFeature.GEMINI_NANO).await()
-            if (status == AiFeatureStatus.DOWNLOADABLE) {
-                aiCore.downloadFeature(AiFeature.GEMINI_NANO).await()
-            }
-            if (status == AiFeatureStatus.AVAILABLE || status == AiFeatureStatus.DOWNLOADABLE) {
-                generativeModel = GenerativeModel("gemini-nano")
-            }
-            Log.d("NanoNutritionist", "Initialized Nano Coach. Status: $status")
+            // Note: Official Gemini Nano requires the Google AI Edge EAP and Android System Intelligence updates.
+            // val aiCore = AiCore.create(context)
+            // val status = aiCore.getFeatureStatus(AiFeature.GEMINI_NANO).await()
+            // if (status == AiFeatureStatus.DOWNLOADABLE) {
+            //     aiCore.downloadFeature(AiFeature.GEMINI_NANO).await()
+            // }
+            // generativeModel = GenerativeModel(GenerationConfig.Builder().build())
+            
+            Log.d("NanoNutritionist", "Gemini Nano EAP SDK disabled. Defaulting to Cloud AI.")
         } catch (e: Exception) {
             Log.e("NanoNutritionist", "Failed to initialize Gemini Nano", e)
         }
@@ -88,9 +88,8 @@ class NanoNutritionistCoach(
         // 5. Try Gemini Nano first, then fallback
         try {
             if (generativeModel != null) {
-                // AICore execution:
-                val response = (generativeModel as GenerativeModel).generateContent(systemPrompt).await()
-                return@withContext "⚡ [On-Device Nano]\n" + (response.text ?: "No response generated.")
+                // val response = (generativeModel as GenerativeModel).generateContent(systemPrompt).await()
+                // return@withContext "⚡ [On-Device Nano]\n" + (response.text ?: "No response generated.")
             }
             
             // Fallback to Cloud AI (Groq Backend via Retrofit)
