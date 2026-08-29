@@ -60,8 +60,15 @@ class VoiceNutritionistCoach(
         // Get text response from coach
         val aiTextResponse = textCoach.generateNutriBotResponse(chatHistory, userProfile)
         
-        // Speak the responseech
-        textToSpeech?.speak(aiTextResponse, TextToSpeech.QUEUE_FLUSH, null, "ChatResponseId")
+        // Clean the response so TTS doesn't speak emojis or hidden tags
+        val speechText = aiTextResponse
+            .replace(Regex("^(⚡ \\[On-Device Nano\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline Fallback\\])\\s*\n"), "")
+            .replace(Regex("\\[LOG_FOOD:.*?\\]"), "")
+            .replace(Regex("\\*\\(.*?\\)\\*"), "") // remove logging confirmation italics
+            .trim()
+        
+        // Speak the clean response
+        textToSpeech?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "ChatResponseId")
         
         return@withContext aiTextResponse
     }

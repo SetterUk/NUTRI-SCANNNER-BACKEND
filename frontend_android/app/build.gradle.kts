@@ -50,8 +50,8 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion") // For Coroutines support
     kapt("androidx.room:room-compiler:$roomVersion")
     
-    // AICore for On-Device Gemini Nano
-    implementation("com.google.ai.edge.aicore:aicore:0.0.1-exp02")
+    // AICore via ML Kit GenAI
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.7.3")
 
     // PDF Parsing

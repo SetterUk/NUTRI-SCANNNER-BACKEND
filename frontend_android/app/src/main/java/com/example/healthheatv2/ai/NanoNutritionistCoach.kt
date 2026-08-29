@@ -8,10 +8,10 @@ import com.example.healthheatv2.data.UserDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.withContext
-// import com.google.ai.edge.aicore.AiCore
-// import com.google.ai.edge.aicore.AiFeature
-// import com.google.ai.edge.aicore.AiFeatureStatus
-import com.google.ai.edge.aicore.GenerativeModel
+import com.google.mlkit.genai.prompt.Generation
+import com.google.mlkit.genai.prompt.FeatureStatus
+import com.google.mlkit.genai.prompt.GenerateContentRequest
+import com.google.mlkit.genai.prompt.TextPart
 
 class NanoNutritionistCoach(
     private val context: Context,
@@ -21,17 +21,15 @@ class NanoNutritionistCoach(
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         try {
-            // Note: Official Gemini Nano requires the Google AI Edge EAP and Android System Intelligence updates.
-            // val aiCore = AiCore.create(context)
-            // val status = aiCore.getFeatureStatus(AiFeature.GEMINI_NANO).await()
-            // if (status == AiFeatureStatus.DOWNLOADABLE) {
-            //     aiCore.downloadFeature(AiFeature.GEMINI_NANO).await()
-            // }
-            // generativeModel = GenerativeModel(GenerationConfig.Builder().build())
+            generativeModel = Generation.getClient()
             
-            Log.d("NanoNutritionist", "Gemini Nano EAP SDK disabled. Defaulting to Cloud AI.")
+            val status = (generativeModel as? com.google.mlkit.genai.prompt.PromptClient)?.checkStatus()?.await()
+            if (status == FeatureStatus.DOWNLOADABLE) {
+                (generativeModel as? com.google.mlkit.genai.prompt.PromptClient)?.download()?.await()
+            }
+            Log.d("NanoNutritionist", "Initialized ML Kit GenAI Nano. Status: $status")
         } catch (e: Exception) {
-            Log.e("NanoNutritionist", "Failed to initialize Gemini Nano", e)
+            Log.e("NanoNutritionist", "Failed to initialize ML Kit Gemini Nano", e)
         }
     }
 
@@ -88,8 +86,13 @@ class NanoNutritionistCoach(
         // 5. Try Gemini Nano first, then fallback
         try {
             if (generativeModel != null) {
-                // val response = (generativeModel as GenerativeModel).generateContent(systemPrompt).await()
-                // return@withContext "⚡ [On-Device Nano]\n" + (response.text ?: "No response generated.")
+                try {
+                    val client = generativeModel as com.google.mlkit.genai.prompt.PromptClient
+                    val response = client.generateContent(systemPrompt).await()
+                    return@withContext "⚡ [On-Device Nano]\n" + (response.text ?: "No response generated.")
+                } catch(e: Exception) {
+                    Log.w("NanoNutritionist", "Nano failed, falling back to cloud", e)
+                }
             }
             
             // Fallback to Cloud AI (Groq Backend via Retrofit)
