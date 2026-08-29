@@ -12,11 +12,17 @@ import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.common.FeatureStatus
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 class NanoNutritionistCoach(
     private val context: Context,
     private val nutritionDao: NutritionDao
 ) {
     private var generativeModel: GenerativeModel? = null // Using GenerativeModel instead of Any?
+    
+    private val _downloadState = MutableStateFlow("")
+    val downloadState = _downloadState.asStateFlow()
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         try {
@@ -24,17 +30,24 @@ class NanoNutritionistCoach(
             
             val status = generativeModel?.checkStatus()
             if (status == FeatureStatus.DOWNLOADABLE) {
+                _downloadState.value = "Downloading Model (0%)"
                 Log.d("NanoNutritionist", "Model needs to be downloaded. Starting download...")
                 generativeModel?.download()?.collect { downloadStatus ->
                     // DownloadStatus doesn't have a public percentage, but it emits updates
+                    _downloadState.value = "Downloading... Please wait"
                     Log.d("NanoNutritionist", "Download in progress... Status object: $downloadStatus")
                 }
+                _downloadState.value = "Model Ready (Nano)"
                 Log.d("NanoNutritionist", "Download complete!")
             } else if (status == FeatureStatus.AVAILABLE) {
+                _downloadState.value = "Model Ready (Nano)"
                 Log.d("NanoNutritionist", "Model is already downloaded and ready to use!")
+            } else {
+                _downloadState.value = "Nano Status: $status"
             }
             Log.d("NanoNutritionist", "Initialized ML Kit GenAI Nano. Status: $status")
         } catch (e: Exception) {
+            _downloadState.value = "Failed to initialize Nano"
             Log.e("NanoNutritionist", "Failed to initialize ML Kit Gemini Nano", e)
         }
     }

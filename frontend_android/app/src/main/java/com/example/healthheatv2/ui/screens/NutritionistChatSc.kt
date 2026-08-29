@@ -66,13 +66,24 @@ fun NutritionistChatScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
                     }
-                    Text(
-                        text = "Nutribot",
-                        color = colors.textPrimary,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                    val downloadState by nanoCoach.downloadState.collectAsState(initial = "Initializing...")
+                    
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(
+                            text = "Nutribot",
+                            color = colors.textPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        AnimatedVisibility(visible = downloadState.isNotBlank()) {
+                            Text(
+                                text = downloadState,
+                                color = if (downloadState.contains("Ready")) colors.accentGreen else colors.textHint,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
 
                 // Custom Segmented Control Tab Switcher
