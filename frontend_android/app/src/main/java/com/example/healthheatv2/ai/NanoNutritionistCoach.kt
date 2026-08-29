@@ -88,7 +88,8 @@ class NanoNutritionistCoach(
             if (generativeModel != null) {
                 try {
                     val response = generativeModel?.generateContent(systemPrompt)
-                    return@withContext "⚡ [On-Device Nano]\n" + (response?.text ?: "No response generated.")
+                    val generatedText = response?.candidates?.firstOrNull()?.text
+                    return@withContext "⚡ [On-Device Nano]\n" + (generatedText ?: "No response generated.")
                 } catch(e: Exception) {
                     Log.w("NanoNutritionist", "Nano failed, falling back to cloud", e)
                 }
