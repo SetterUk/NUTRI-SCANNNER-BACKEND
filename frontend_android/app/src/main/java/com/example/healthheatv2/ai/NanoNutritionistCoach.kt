@@ -47,7 +47,7 @@ class NanoNutritionistCoach(
             }
             Log.d("NanoNutritionist", "Initialized ML Kit GenAI Nano. Status: $status")
         } catch (e: Exception) {
-            _downloadState.value = "Failed to initialize Nano"
+            _downloadState.value = "Nano Error: ${e.message ?: "Unknown"}"
             Log.e("NanoNutritionist", "Failed to initialize ML Kit Gemini Nano", e)
         }
     }
