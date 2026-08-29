@@ -77,7 +77,7 @@ Return ONLY this JSON with no explanation:
                             "content": prompt
                         }
                     ],
-                    model="llama3-70b-8192",
+                    model="openai/gpt-oss-120b",
                     response_format={"type": "json_object"},
                     temperature=0,  # deterministic — classification must be consistent
                 )
