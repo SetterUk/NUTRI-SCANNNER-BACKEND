@@ -28,9 +28,11 @@ class AIAnalysisResult(BaseModel):
     ingredients_analysis: Optional[List[IngredientAnalysis]] = Field(default_factory=list)
     nutrition_analysis: Optional[NutritionAnalysis] = None
 
-    @field_validator('verdict')
+    @field_validator('verdict', mode='before')
     @classmethod
-    def clean_verdict(cls, v: str) -> str:
+    def clean_verdict(cls, v: Optional[str]) -> str:
+        if not v:
+            return "PASS"
         clean = v.strip().upper().replace("!", "").replace(".", "")
         return clean if clean in ["SMASH", "PASS"] else "PASS"
 
