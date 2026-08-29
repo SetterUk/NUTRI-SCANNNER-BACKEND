@@ -24,8 +24,14 @@ class NanoNutritionistCoach(
             
             val status = generativeModel?.checkStatus()
             if (status == FeatureStatus.DOWNLOADABLE) {
-                // GenerativeModel's download returns a Flow, so we just collect it or ignore it for background
-                // We'll skip explicit download blocking and let ML Kit handle it in the background if possible
+                Log.d("NanoNutritionist", "Model needs to be downloaded. Starting download...")
+                generativeModel?.download()?.collect { downloadStatus ->
+                    // DownloadStatus doesn't have a public percentage, but it emits updates
+                    Log.d("NanoNutritionist", "Download in progress... Status object: $downloadStatus")
+                }
+                Log.d("NanoNutritionist", "Download complete!")
+            } else if (status == FeatureStatus.AVAILABLE) {
+                Log.d("NanoNutritionist", "Model is already downloaded and ready to use!")
             }
             Log.d("NanoNutritionist", "Initialized ML Kit GenAI Nano. Status: $status")
         } catch (e: Exception) {
