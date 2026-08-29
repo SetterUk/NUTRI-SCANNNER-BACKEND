@@ -21,7 +21,7 @@ class NanoNutritionistCoach(
 ) {
     private var generativeModel: GenerativeModel? = null // Using GenerativeModel instead of Any?
     
-    private val _downloadState = MutableStateFlow("")
+    private val _downloadState = MutableStateFlow("Waiting for initialization...")
     val downloadState = _downloadState.asStateFlow()
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
