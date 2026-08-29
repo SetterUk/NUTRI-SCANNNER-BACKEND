@@ -50,6 +50,9 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion") // For Coroutines support
     kapt("androidx.room:room-compiler:$roomVersion")
     
+    // Fix for Kotlin 2.2+ Kapt metadata error
+    kapt("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
+    
     // AICore via ML Kit GenAI
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.7.3")

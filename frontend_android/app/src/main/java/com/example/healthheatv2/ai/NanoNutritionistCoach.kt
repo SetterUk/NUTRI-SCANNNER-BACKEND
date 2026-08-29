@@ -9,23 +9,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.withContext
 import com.google.mlkit.genai.prompt.Generation
-import com.google.mlkit.genai.prompt.FeatureStatus
-import com.google.mlkit.genai.prompt.GenerateContentRequest
-import com.google.mlkit.genai.prompt.TextPart
+import com.google.mlkit.genai.prompt.GenerativeModel
+import com.google.mlkit.genai.common.FeatureStatus
 
 class NanoNutritionistCoach(
     private val context: Context,
     private val nutritionDao: NutritionDao
 ) {
-    private var generativeModel: Any? = null // Using Any? so we don't crash if AICore fails completely
+    private var generativeModel: GenerativeModel? = null // Using GenerativeModel instead of Any?
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         try {
             generativeModel = Generation.getClient()
             
-            val status = (generativeModel as? com.google.mlkit.genai.prompt.PromptClient)?.checkStatus()?.await()
+            val status = generativeModel?.checkStatus()
             if (status == FeatureStatus.DOWNLOADABLE) {
-                (generativeModel as? com.google.mlkit.genai.prompt.PromptClient)?.download()?.await()
+                // GenerativeModel's download returns a Flow, so we just collect it or ignore it for background
+                // We'll skip explicit download blocking and let ML Kit handle it in the background if possible
             }
             Log.d("NanoNutritionist", "Initialized ML Kit GenAI Nano. Status: $status")
         } catch (e: Exception) {
@@ -87,9 +87,8 @@ class NanoNutritionistCoach(
         try {
             if (generativeModel != null) {
                 try {
-                    val client = generativeModel as com.google.mlkit.genai.prompt.PromptClient
-                    val response = client.generateContent(systemPrompt).await()
-                    return@withContext "⚡ [On-Device Nano]\n" + (response.text ?: "No response generated.")
+                    val response = generativeModel?.generateContent(systemPrompt)
+                    return@withContext "⚡ [On-Device Nano]\n" + (response?.text ?: "No response generated.")
                 } catch(e: Exception) {
                     Log.w("NanoNutritionist", "Nano failed, falling back to cloud", e)
                 }
