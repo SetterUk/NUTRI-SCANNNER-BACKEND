@@ -157,6 +157,20 @@ fun App(modifier: Modifier = Modifier) {
             apiService = RetrofitClient.apiService
         )
 
+        // ── Gemma 4 E2B: create once, shared across all screens ──────────────
+        val gemmaManager = remember { com.example.healthheatv2.ai.GemmaInferenceManager(context) }
+        val nanoCoach = remember(userDatabase) {
+            com.example.healthheatv2.ai.NanoNutritionistCoach(
+                context = context,
+                nutritionDao = userDatabase.nutritionDao(),
+                gemmaManager = gemmaManager
+            )
+        }
+        // Initialize Gemma 4 E2B model in background on first composition
+        LaunchedEffect(Unit) {
+            gemmaManager.initialize()
+        }
+
         val scannerViewModel: ScannerViewModel = viewModel(
             factory = object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -259,28 +273,30 @@ fun App(modifier: Modifier = Modifier) {
                 }
 
                 composable(Screen.NutritionistChat.route) {
-                    val mappedProfile = mapNetworkProfileToLocal(userProfile)
-                    val nutritionEngine = remember(mappedProfile) {
-                        com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                    val profile = userProfile
+                    if (profile != null) {
+                        val mappedProfile = mapNetworkProfileToLocal(profile)
+                        val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                        val voiceCoach = remember(mappedProfile) {
+                            com.example.healthheatv2.ai.VoiceNutritionistCoach(context, nanoCoach)
+                        }
+
+                        com.example.healthheatv2.ui.screens.NutritionistChatScreen(
+                            voiceCoach = voiceCoach,
+                            nanoCoach = nanoCoach,
+                            userProfile = mappedProfile,
+                            nutritionEngine = nutritionEngine,
+                            onFixMyNutritionClick = { gap ->
+                                scannerViewModel.selectedGap = gap
+                                navController.navigate(Screen.FixMyNutrition.route)
+                            },
+                            onBackClick = { navController.popBackStack() }
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
-                    val nanoCoach = remember(mappedProfile) { 
-                        com.example.healthheatv2.ai.NanoNutritionistCoach(context, userDatabase.nutritionDao()) 
-                    }
-                    val voiceCoach = remember(mappedProfile) {
-                        com.example.healthheatv2.ai.VoiceNutritionistCoach(context, nanoCoach)
-                    }
-                    
-                    com.example.healthheatv2.ui.screens.NutritionistChatScreen(
-                        voiceCoach = voiceCoach,
-                        nanoCoach = nanoCoach,
-                        userProfile = mappedProfile,
-                        nutritionEngine = nutritionEngine,
-                        onFixMyNutritionClick = { gap ->
-                            scannerViewModel.selectedGap = gap
-                            navController.navigate(Screen.FixMyNutrition.route)
-                        },
-                        onBackClick = { navController.popBackStack() }
-                    )
                 }
 
                 composable(Screen.ManualSearch.route) {
@@ -314,6 +330,8 @@ fun App(modifier: Modifier = Modifier) {
                     ProductScreen(
                         viewModel = scannerViewModel,
                         nutritionEngine = nutritionEngine,
+                        nanoCoach = nanoCoach,
+                        userProfile = mappedProfile,
                         onScanAnother = {
                             scannerViewModel.resetState()
                             navController.popBackStack(Screen.SearchHub.route, inclusive = false)
@@ -334,6 +352,8 @@ fun App(modifier: Modifier = Modifier) {
                         FixMyNutritionSc(
                             gap = gap,
                             recommendationEngine = recEngine,
+                            nanoCoach = nanoCoach,
+                            userProfile = mappedProfile,
                             onBackClick = { navController.popBackStack() }
                         )
                     }

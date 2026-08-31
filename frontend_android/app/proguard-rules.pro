@@ -19,3 +19,20 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ── LiteRT-LM / ML Kit GenAI (Gemma 4 E2B on-device inference) ──────────────
+-keep class com.google.mlkit.genai.** { *; }
+-keep class com.google.android.gms.tflite.** { *; }
+-keep class org.tensorflow.lite.** { *; }
+-keep class com.google.android.gms.internal.mlkit_genai.** { *; }
+-dontwarn com.google.mlkit.genai.**
+-dontwarn org.tensorflow.lite.**
+
+# Keep LiteRT native interop symbols
+-keepclassmembers class * {
+    native <methods>;
+}
+
+# PDF parsing (PdfBox Android)
+-keep class com.tom_roush.pdfbox.** { *; }
+-dontwarn com.tom_roush.pdfbox.**

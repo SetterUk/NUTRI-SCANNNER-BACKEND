@@ -59,4 +59,10 @@ interface NutritionDao {
 
     @Query("DELETE FROM SavedChatMessage")
     suspend fun clearChatHistory()
+
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun upsertDailyPlan(plan: SavedDailyPlan)
+
+    @Query("SELECT * FROM SavedDailyPlan WHERE dateKey = :dateKey LIMIT 1")
+    suspend fun getPlanForDate(dateKey: String): SavedDailyPlan?
 }

@@ -159,8 +159,8 @@ class VoiceNutritionistCoach(
         }
     }
 
-    suspend fun chatWithVoice(chatHistory: List<com.example.healthheatv2.ui.screens.ChatMessage>, userProfile: com.example.healthheatv2.data.UserProfile, consumedKcal: Float): String = withContext(Dispatchers.Default) {
-        val aiTextResponse = textCoach.generateNutriBotResponse(chatHistory, userProfile, consumedKcal)
+    suspend fun chatWithVoice(chatHistory: List<com.example.healthheatv2.ui.screens.ChatMessage>, userProfile: com.example.healthheatv2.data.UserProfile, nutritionEngine: com.example.healthheatv2.services.NutritionEngine): String = withContext(Dispatchers.Default) {
+        val aiTextResponse = textCoach.generateNutriBotResponse(chatHistory, userProfile, nutritionEngine)
         speak(aiTextResponse, aiTextResponse)
         return@withContext aiTextResponse
     }

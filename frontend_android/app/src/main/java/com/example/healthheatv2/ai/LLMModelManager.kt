@@ -1,44 +1,82 @@
 package com.example.healthheatv2.ai
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.net.URL
 
-class LLMModelManager(val context: Context) {
-    private val modelFileName = "gemma-1b-it.task"
-    // URL would typically be valid; for demo purposes it will check file existence.
-    private val modelUrl = "https://ai-edge-torch-releases.us-central1.goog/genai/gemma-1b-it.task"
+/**
+ * Detects whether a Gemma 4 E2B model file has been sideloaded on the device.
+ * Used as a pre-check before GemmaInferenceManager attempts ML Kit GenAI init.
+ *
+ * Supported sideload paths (for ADB testing):
+ *   adb push gemma4-e2b-it.task /data/local/tmp/gemma4-e2b-it.task
+ *   adb push gemma4-e2b-it.task /sdcard/Download/gemma4-e2b-it.task
+ */
+class LLMModelManager(private val context: Context) {
 
-    suspend fun ensureModelDownloaded(): File = withContext(Dispatchers.IO) {
-        val modelDir = File(context.cacheDir, "llm_models")
-        if (!modelDir.exists()) modelDir.mkdir()
-        
-        val modelFile = File(modelDir, modelFileName)
-        if (modelFile.exists() && modelFile.length() > 0) {
-            return@withContext modelFile
-        }
+    // Ordered list of Gemma candidate file names (most preferred first)
+    private val gemma4Candidates = listOf(
+        "gemma-2b-it-gpu-int4.bin",
+        "gemma-2b-it-cpu-int4.bin",
+        "gemma4-e2b-it.task",
+        "gemma4-e2b-it-int4.bin",
+        "gemma4-e2b.task",
+        "gemma4-e2b.bin",
+        "gemma-2b-it.task",
+        "gemma-2b-it.bin",
+        "gemma2-2b-it.bin",
+        "gemma2-2b-it-gpu-int4.bin",
+        "gemma-1b-it.task"
+    )
 
-        // Simulating download or returning a mock path if running in emulator without real model
-        // In a real scenario: downloadModel(modelUrl, modelFile)
-        
-        // For the hackathon demo, if the file doesn't exist, we'll try to use a dummy file
-        // or just throw an exception. The user should push the model via adb to cache/llm_models.
-        if (!modelFile.exists()) {
-            modelFile.createNewFile() // Creates a dummy file so it doesn't crash initialization completely
-        }
-        
-        return@withContext modelFile
+    // Ordered list of directories to scan for sideloaded model files
+    private val searchDirectories: List<File> by lazy {
+        listOf(
+            context.filesDir,                               // /data/data/com.example.healthheatv2/files
+            File(context.filesDir, "llm_models"),           // app private storage subdir
+            context.cacheDir,                               // app cache
+            File(context.cacheDir, "llm_models"),           // app cache subdir
+            File("/data/local/tmp"),                        // ADB sideload
+            context.getExternalFilesDir(null),              // external app storage
+            File(context.getExternalFilesDir(null), "llm_models")
+        ).filterNotNull()
     }
 
-    private suspend fun downloadModel(url: String, destFile: File) {
-        // Pseudo code for actual downloading
-        // val connection = URL(url).openConnection()
-        // connection.inputStream.use { input ->
-        //     destFile.outputStream().use { output ->
-        //         input.copyTo(output)
-        //     }
-        // }
+    data class ModelInfo(
+        val file: File,
+        val name: String,
+        val sizeMb: Float
+    )
+
+    /**
+     * Scans all known directories for a valid Gemma 4 E2B (or compatible) model file.
+     * @return [ModelInfo] if found, null otherwise.
+     */
+    suspend fun findSideloadedModel(): ModelInfo? = withContext(Dispatchers.IO) {
+        for (dir in searchDirectories) {
+            if (!dir.exists()) continue
+            for (candidate in gemma4Candidates) {
+                val file = File(dir, candidate)
+                if (file.exists() && file.length() > 1_000_000L) { // must be > 1MB (not a dummy)
+                    val sizeMb = file.length() / (1024f * 1024f)
+                    Log.d(TAG, "✅ Found sideloaded model: ${file.absolutePath} (${sizeMb.toInt()} MB)")
+                    return@withContext ModelInfo(file, candidate, sizeMb)
+                }
+            }
+        }
+        Log.d(TAG, "No sideloaded model file found.")
+        return@withContext null
+    }
+
+    /**
+     * Returns the recommended ADB command the developer can use to sideload the model.
+     */
+    fun getAdbSideloadCommand(): String =
+        "adb push gemma4-e2b-it.task /data/local/tmp/gemma4-e2b-it.task"
+
+    companion object {
+        private const val TAG = "LLMModelManager"
     }
 }

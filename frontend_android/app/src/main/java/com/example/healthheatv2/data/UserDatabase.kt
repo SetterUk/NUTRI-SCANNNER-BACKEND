@@ -27,9 +27,10 @@ import kotlinx.coroutines.launch
         FoodAllergen::class,
         MealTemplate::class,
         MealItem::class,
-        SavedChatMessage::class
+        SavedChatMessage::class,
+        SavedDailyPlan::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

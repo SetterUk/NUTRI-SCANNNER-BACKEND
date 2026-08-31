@@ -286,4 +286,24 @@ class NutritionEngine(
     suspend fun clearChatHistory() {
         db.nutritionDao().clearChatHistory()
     }
+
+    /**
+     * Persists an AI-generated daily meal plan keyed by date ("2026-08-31").
+     * Screens call this after receiving the plan from NanoNutritionistCoach.
+     */
+    suspend fun saveDailyPlan(dateKey: String, planText: String, aiTier: String = "unknown") {
+        val plan = com.example.healthheatv2.data.SavedDailyPlan(
+            dateKey = dateKey,
+            planText = planText,
+            aiTier = aiTier
+        )
+        db.nutritionDao().upsertDailyPlan(plan)
+    }
+
+    /**
+     * Returns the saved meal plan for today if it exists, otherwise null.
+     */
+    suspend fun getDailyPlan(dateKey: String): com.example.healthheatv2.data.SavedDailyPlan? {
+        return db.nutritionDao().getPlanForDate(dateKey)
+    }
 }
