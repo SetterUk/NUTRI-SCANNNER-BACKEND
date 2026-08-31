@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "637255913649",
+    "project_id": "healthheat",
+    "storage_bucket": "healthheat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:637255913649:android:8e5eff366bd5f7cec51290",
+        "android_client_info": {
+          "package_name": "com.example.healthheatv2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-IZkzQ8mbzHKlS5-VVRBhjHwN7_-nne0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
