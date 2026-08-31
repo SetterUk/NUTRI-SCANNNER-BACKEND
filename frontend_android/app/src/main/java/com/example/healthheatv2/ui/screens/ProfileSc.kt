@@ -1,9 +1,11 @@
 package com.example.healthheatv2.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
 import com.example.healthheatv2.ui.theme.AppColors
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
@@ -45,20 +50,29 @@ fun ProfileScreen(
     var height by remember { mutableStateOf(userProfile?.height?.toString() ?: "") }
     var allergies by remember { mutableStateOf(userProfile?.allergies?.joinToString(", ") ?: "") }
     var healthGoals by remember { mutableStateOf(userProfile?.healthGoals ?: "") }
+    var selectedDiet by remember { mutableStateOf(userProfile?.dietaryPreferences.takeIf { !it.isNullOrBlank() } ?: "None") }
     var gender by remember { mutableStateOf(userProfile?.gender ?: "Prefer not to say") }
     var activityLevel by remember { mutableStateOf(userProfile?.activityLevel ?: "Prefer not to say") }
+
+    var isEditing by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+    var saveMessage by remember { mutableStateOf<String?>(null) }
+    var isSuccessMessage by remember { mutableStateOf(true) }
+
+    val currentUser = remember {
+        try {
+            FirebaseAuth.getInstance().currentUser
+        } catch (e: Exception) {
+            null
+        }
+    }
+    val photoUrl = currentUser?.photoUrl
+    val email = currentUser?.email
+    val displayName = currentUser?.displayName
 
     val diets = listOf("None", "Vegan", "Vegetarian", "Keto", "Diabetic", "Bulking", "Gluten-Free")
     val genders = listOf("Prefer not to say", "Female", "Male", "Non-binary", "Other")
     val activityLevels = listOf("Prefer not to say", "Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Extra Active")
-    var selectedDiet by remember { mutableStateOf(userProfile?.dietaryPreferences ?: "None") }
-
-    var isSaving by remember { mutableStateOf(false) }
-    var saveMessage by remember { mutableStateOf<String?>(null) }
-
-    // Edit mode toggle — defaults to view mode if profile is already filled
-    val isProfileFilled = userProfile != null
-    var isEditing by remember { mutableStateOf(!isProfileFilled) }
 
     LaunchedEffect(userProfile) {
         userProfile?.let { profile ->
@@ -71,12 +85,10 @@ fun ProfileScreen(
             selectedDiet = profile.dietaryPreferences.takeIf { !it.isNullOrBlank() } ?: "None"
             gender = profile.gender ?: "Prefer not to say"
             activityLevel = profile.activityLevel ?: "Prefer not to say"
-            // Once profile loads, switch to view mode
             isEditing = false
         }
     }
 
-    // Calculate Completion dynamically based on current input
     val fields = listOf(
         age.takeIf { it.isNotBlank() },
         weight.takeIf { it.isNotBlank() },
@@ -96,7 +108,6 @@ fun ProfileScreen(
             .background(colors.background)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -116,10 +127,8 @@ fun ProfileScreen(
                         .padding(start = 8.dp)
                         .weight(1f)
                 )
-                // Pencil / Done button
                 if (isEditing) {
                     TextButton(onClick = {
-                        // Cancel edit — restore from profile
                         userProfile?.let { profile ->
                             age = profile.age?.toString() ?: ""
                             weight = profile.weightKg?.toString() ?: ""
@@ -146,8 +155,57 @@ fun ProfileScreen(
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Profile Completion Bar
-                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.card)
+                        .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(colors.surface)
+                            .border(1.5.dp, colors.accentGreen, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (photoUrl != null) {
+                            AsyncImage(
+                                model = photoUrl,
+                                contentDescription = "Profile Photo",
+                                modifier = Modifier.size(52.dp).clip(CircleShape)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.Person,
+                                contentDescription = "Profile",
+                                tint = colors.textSecondary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = displayName ?: preferredName.takeIf { it.isNotBlank() } ?: "Healthy User",
+                            color = colors.textPrimary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (!email.isNullOrBlank()) {
+                            Text(
+                                text = email,
+                                color = colors.textSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

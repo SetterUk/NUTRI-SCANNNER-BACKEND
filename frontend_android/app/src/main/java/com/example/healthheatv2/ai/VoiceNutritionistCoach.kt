@@ -7,7 +7,10 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
@@ -17,17 +20,46 @@ class VoiceNutritionistCoach(
 ) {
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
-    
+    private var isCancelled = false
+
+    private val _speakingMessageText = MutableStateFlow<String?>(null)
+    val speakingMessageText = _speakingMessageText.asStateFlow()
+
     init {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
         textToSpeech = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 textToSpeech?.language = Locale("en", "IN") // Indian English
+                textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        _speakingMessageText.value = utteranceId
+                    }
+
+                    override fun onDone(utteranceId: String?) {
+                        if (_speakingMessageText.value == utteranceId) {
+                            _speakingMessageText.value = null
+                        }
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        if (_speakingMessageText.value == utteranceId) {
+                            _speakingMessageText.value = null
+                        }
+                    }
+
+                    override fun onError(utteranceId: String?, errorCode: Int) {
+                        if (_speakingMessageText.value == utteranceId) {
+                            _speakingMessageText.value = null
+                        }
+                    }
+                })
             }
         }
     }
 
     fun startVoiceInput(onResult: (String) -> Unit, onError: (String) -> Unit = {}) {
+        isCancelled = false
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
@@ -45,10 +77,17 @@ class VoiceNutritionistCoach(
             override fun onEndOfSpeech() {}
             
             override fun onError(error: Int) {
-                onError("Speech recognition error code: $error")
+                if (isCancelled) return
+                // Suppress client cancel, no-match, and timeout codes from emitting user-facing errors
+                if (error != SpeechRecognizer.ERROR_CLIENT && 
+                    error != SpeechRecognizer.ERROR_NO_MATCH && 
+                    error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                    onError("Speech recognition error code: $error")
+                }
             }
 
             override fun onResults(results: Bundle?) {
+                if (isCancelled) return
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 matches?.firstOrNull()?.let { onResult(it) }
             }
@@ -60,27 +99,84 @@ class VoiceNutritionistCoach(
         speechRecognizer?.startListening(intent)
     }
 
-    suspend fun chatWithVoice(chatHistory: List<com.example.healthheatv2.ui.screens.ChatMessage>, userProfile: com.example.healthheatv2.data.UserProfile, consumedKcal: Float): String = withContext(Dispatchers.Default) {
-        // Get text response from coach
-        val aiTextResponse = textCoach.generateNutriBotResponse(chatHistory, userProfile, consumedKcal)
-        
-        // Clean the response so TTS doesn't speak emojis or hidden tags or markdown symbols
-        val speechText = aiTextResponse
+    fun cancelVoiceInput() {
+        isCancelled = true
+        try {
+            speechRecognizer?.setRecognitionListener(null)
+            speechRecognizer?.cancel()
+            speechRecognizer?.stopListening()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun finishVoiceInput() {
+        try {
+            speechRecognizer?.stopListening()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun cleanTextForSpeech(rawText: String): String {
+        val textWithoutThink = if (rawText.contains("</think>")) {
+            rawText.substringAfter("</think>")
+        } else {
+            rawText
+        }
+        return textWithoutThink
             .replace(Regex("^(⚡ \\[On-Device Nano\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline Fallback\\])\\s*\n"), "")
             .replace(Regex("\\[LOG_FOOD:.*?\\]"), "")
             .replace(Regex("\\*\\(.*?\\)\\*"), "") // remove logging confirmation italics
-            .replace(Regex("[^a-zA-Z0-9.,?!'\\s]"), " ") // aggressively remove ALL special symbols for TTS, replace with space
+            .replace(Regex("[*#_~`]"), "") // remove markdown characters
+            .replace(Regex("[^a-zA-Z0-9.,?!'\\s]"), " ") // aggressively remove special symbols for TTS
             .replace(Regex("\\s+"), " ") // collapse multiple spaces
             .trim()
-        
-        // Speak the clean response
-        textToSpeech?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "ChatResponseId")
-        
+    }
+
+    fun speak(text: String, messageId: String = text) {
+        stopTTS()
+        val speechText = cleanTextForSpeech(text)
+        if (speechText.isBlank()) return
+        _speakingMessageText.value = messageId
+        textToSpeech?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, messageId)
+    }
+
+    fun stopTTS() {
+        try {
+            textToSpeech?.stop()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        _speakingMessageText.value = null
+    }
+
+    fun toggleTTS(text: String, messageId: String = text) {
+        if (_speakingMessageText.value == messageId) {
+            stopTTS()
+        } else {
+            speak(text, messageId)
+        }
+    }
+
+    suspend fun chatWithVoice(chatHistory: List<com.example.healthheatv2.ui.screens.ChatMessage>, userProfile: com.example.healthheatv2.data.UserProfile, consumedKcal: Float): String = withContext(Dispatchers.Default) {
+        val aiTextResponse = textCoach.generateNutriBotResponse(chatHistory, userProfile, consumedKcal)
+        speak(aiTextResponse, aiTextResponse)
         return@withContext aiTextResponse
     }
 
     fun stop() {
-        speechRecognizer?.destroy()
-        textToSpeech?.shutdown()
+        try {
+            speechRecognizer?.destroy()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            textToSpeech?.stop()
+            textToSpeech?.shutdown()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        _speakingMessageText.value = null
     }
 }

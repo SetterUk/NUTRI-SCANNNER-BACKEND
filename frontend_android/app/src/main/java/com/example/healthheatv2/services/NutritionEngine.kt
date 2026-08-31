@@ -282,4 +282,8 @@ class NutritionEngine(
         val msg = com.example.healthheatv2.data.SavedChatMessage(text = text, isUser = isUser)
         db.nutritionDao().insertChatMessage(msg)
     }
+
+    suspend fun clearChatHistory() {
+        db.nutritionDao().clearChatHistory()
+    }
 }
