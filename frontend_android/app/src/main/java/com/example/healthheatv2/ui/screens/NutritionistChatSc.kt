@@ -303,10 +303,10 @@ private fun ChatInputBar(
                             .clickable(enabled = !isLoading && inputText.isNotBlank()) {
                                 val userMsg = inputText
                                 sharedChatMessages.add(ChatMessage(userMsg, true))
-                                nutritionEngine.saveChatMessage(userMsg, true)
                                 inputText = ""
                                 isLoading = true
                                 scope.launch {
+                                    nutritionEngine.saveChatMessage(userMsg, true)
                                     try {
                                         val consumedKcal = nutritionEngine.getTodayIntake().calories
                                         val response = nanoCoach.generateNutriBotResponse(sharedChatMessages.toList(), userProfile, consumedKcal)
@@ -368,9 +368,9 @@ private fun ChatInputBar(
                                         isListening = false
                                         val userMsg = result
                                         sharedChatMessages.add(ChatMessage(userMsg, true))
-                                        nutritionEngine.saveChatMessage(userMsg, true)
                                         isLoading = true
                                         scope.launch {
+                                            nutritionEngine.saveChatMessage(userMsg, true)
                                             try {
                                                 val consumedKcal = nutritionEngine.getTodayIntake().calories
                                                 val response = voiceCoach.chatWithVoice(sharedChatMessages.toList(), userProfile, consumedKcal)

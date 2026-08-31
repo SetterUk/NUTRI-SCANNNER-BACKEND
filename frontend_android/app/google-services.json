@@ -12,7 +12,20 @@
           "package_name": "com.example.healthheatv2"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "637255913649-8pjt8k3h06qotj3v4rq90t7m5sffm08e.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.healthheatv2",
+            "certificate_hash": "b16979e4e8742c39c01ec677e10fa9b8e2e56c64"
+          }
+        },
+        {
+          "client_id": "637255913649-a4i4r1bqd74319livs80vos9ico5mcm3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD-IZkzQ8mbzHKlS5-VVRBhjHwN7_-nne0"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "637255913649-a4i4r1bqd74319livs80vos9ico5mcm3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
