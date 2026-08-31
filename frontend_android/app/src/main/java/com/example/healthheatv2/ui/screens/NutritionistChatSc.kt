@@ -63,6 +63,10 @@ fun NutritionistChatScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(Unit) {
+        nanoCoach.initialize()
+    }
+
     Scaffold(
         containerColor = colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -294,11 +298,33 @@ private fun ChatContent(
         }
     }
 
+    val downloadState by coach.modelManager.downloadState.collectAsState()
+    val scope = rememberCoroutineScope()
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 16.dp, start = 16.dp, end = 16.dp, top = 8.dp)
     ) {
+        if (!coach.gemmaManager.isModelReady()) {
+            item {
+                GemmaModelCard(
+                    downloadState = downloadState,
+                    onDownloadClick = {
+                        scope.launch {
+                            try {
+                                val file = coach.modelManager.getOrDownloadModel()
+                                coach.loadGemmaModel(file)
+                            } catch (e: Exception) {
+                                android.util.Log.e("ChatContent", "Failed to download/load Gemma", e)
+                            }
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+
         items(sharedChatMessages) { msg ->
             val isSpeakingThis = currentlySpeakingText == msg.text
             AnimatedVisibility(
@@ -314,6 +340,97 @@ private fun ChatContent(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun GemmaModelCard(
+    downloadState: com.example.healthheatv2.ai.ModelDownloadState,
+    onDownloadClick: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.card),
+        border = BorderStroke(1.dp, colors.border)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.SmartToy,
+                    contentDescription = "Gemma 2B",
+                    tint = colors.accentGreen,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Gemma 2B On-Device AI",
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            when (downloadState) {
+                is com.example.healthheatv2.ai.ModelDownloadState.NotDownloaded -> {
+                    Text(
+                        text = "Run 100% private, offline nutrition intelligence on your device GPU.",
+                        color = colors.textSecondary,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = onDownloadClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text("Download Model (~1.4 GB)", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+                is com.example.healthheatv2.ai.ModelDownloadState.Downloading -> {
+                    Text(
+                        text = "Downloading Gemma 2B: ${downloadState.progressPercent}%",
+                        color = colors.textSecondary,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { downloadState.progressPercent / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = colors.accentGreen,
+                        trackColor = colors.border
+                    )
+                }
+                is com.example.healthheatv2.ai.ModelDownloadState.Ready -> {
+                    Text(
+                        text = "Model ready! (${downloadState.sizeMb} MB) Loading into GPU...",
+                        color = colors.accentGreen,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                is com.example.healthheatv2.ai.ModelDownloadState.Error -> {
+                    Text(
+                        text = "Download error: ${downloadState.message}",
+                        color = colors.accentRed,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onDownloadClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.accentRed),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Retry Download", color = Color.White, fontSize = 13.sp)
+                    }
+                }
+            }
         }
     }
 }

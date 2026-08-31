@@ -69,6 +69,9 @@ dependencies {
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.7.3")
 
+    // MediaPipe Tasks GenAI (Gemma 2B / E2B on-device LLM inference)
+    implementation("com.google.mediapipe:tasks-genai:0.10.20")
+
     // PDF Parsing
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
