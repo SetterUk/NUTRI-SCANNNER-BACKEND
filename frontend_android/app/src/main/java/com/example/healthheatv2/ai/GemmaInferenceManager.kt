@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 class GemmaInferenceManager(private val context: Context) {
 
     sealed class ModelState {
+        object Unloaded : ModelState()
         object Initializing : ModelState()
         data class Downloading(val progressLabel: String) : ModelState()
         object Ready : ModelState()
@@ -28,7 +29,7 @@ class GemmaInferenceManager(private val context: Context) {
         object Unavailable : ModelState()
     }
 
-    private val _modelState = MutableStateFlow<ModelState>(ModelState.Initializing)
+    private val _modelState = MutableStateFlow<ModelState>(ModelState.Unloaded)
     val modelState = _modelState.asStateFlow()
 
     private var generativeModel: GenerativeModel? = null
@@ -162,7 +163,7 @@ class GemmaInferenceManager(private val context: Context) {
         }
 
     /**
-     * Releases the model from GPU memory.
+     * Releases the model from GPU/RAM memory.
      */
     fun dispose() {
         try {
@@ -178,7 +179,7 @@ class GemmaInferenceManager(private val context: Context) {
             Log.w(TAG, "Error during dispose", e)
         }
         generativeModel = null
-        _modelState.value = ModelState.Initializing
+        _modelState.value = ModelState.Unloaded
         Log.d(TAG, "GemmaInferenceManager disposed. GPU memory freed.")
     }
 
@@ -186,9 +187,10 @@ class GemmaInferenceManager(private val context: Context) {
      * Short human-readable label for the UI status badge in NutritionistChatSc.
      */
     fun getStatusLabel(): String = when (val s = _modelState.value) {
-        is ModelState.Ready        -> "⚡ Gemma 4 E2B"
+        is ModelState.Ready        -> "⚡ Gemma 4 (On-Device)"
         is ModelState.Downloading  -> "⬇️ ${s.progressLabel}"
-        is ModelState.Initializing -> "⏳ Initializing..."
+        is ModelState.Initializing -> "⏳ Loading Gemma..."
+        is ModelState.Unloaded     -> "☁️ Cloud AI (Default)"
         is ModelState.Error        -> "☁️ Cloud Mode"
         is ModelState.Unavailable  -> "☁️ Cloud Mode"
     }

@@ -166,9 +166,11 @@ fun App(modifier: Modifier = Modifier) {
                 gemmaManager = gemmaManager
             )
         }
-        // Initialize Gemma 4 E2B model in background on first composition
+        // Cloud AI is default. Only initialize on-device Gemma if user previously enabled local model.
         LaunchedEffect(Unit) {
-            gemmaManager.initialize()
+            if (nanoCoach.useLocalModel.value) {
+                gemmaManager.initialize()
+            }
         }
 
         val scannerViewModel: ScannerViewModel = viewModel(

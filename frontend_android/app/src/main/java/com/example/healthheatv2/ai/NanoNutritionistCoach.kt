@@ -31,10 +31,59 @@ class NanoNutritionistCoach(
     private val gemmaManager: GemmaInferenceManager
 ) {
     private val promptBuilder = NutritionistPrompt()
+    private val prefs = context.getSharedPreferences("ai_prefs", Context.MODE_PRIVATE)
+
+    private val KEY_USE_LOCAL_MODEL = "use_local_model"
+    private val KEY_PROMPTED_LOCAL_MODEL = "prompted_local_model"
+
+    private val _useLocalModel = kotlinx.coroutines.flow.MutableStateFlow(prefs.getBoolean(KEY_USE_LOCAL_MODEL, false))
+    val useLocalModel: StateFlow<Boolean> = _useLocalModel
 
     /** Exposes the Gemma 4 model state for the UI status badge. */
     val modelState: StateFlow<GemmaInferenceManager.ModelState> get() = gemmaManager.modelState
-    fun getStatusLabel(): String = gemmaManager.getStatusLabel()
+
+    fun getStatusLabel(): String {
+        return if (!_useLocalModel.value) {
+            "☁️ Cloud AI (Default)"
+        } else {
+            gemmaManager.getStatusLabel()
+        }
+    }
+
+    fun isLocalModelReady(): Boolean = gemmaManager.isReady
+
+    fun hasPromptedLocalModel(): Boolean = prefs.getBoolean(KEY_PROMPTED_LOCAL_MODEL, false)
+
+    fun setHasPromptedLocalModel(prompted: Boolean = true) {
+        prefs.edit().putBoolean(KEY_PROMPTED_LOCAL_MODEL, prompted).apply()
+    }
+
+    /**
+     * Enables or disables on-device local model inference.
+     * When enabling, loads Gemma into GPU/RAM memory.
+     * When disabling, unloads Gemma and immediately frees GPU/RAM memory.
+     */
+    suspend fun setUseLocalModel(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_USE_LOCAL_MODEL, enabled).apply()
+        _useLocalModel.value = enabled
+        if (enabled) {
+            gemmaManager.initialize()
+        } else {
+            gemmaManager.dispose()
+        }
+    }
+
+    /** Loads local model into memory and enables on-device mode */
+    suspend fun loadLocalModel() {
+        setUseLocalModel(true)
+    }
+
+    /** Unloads local model from memory, freeing GPU/RAM, and reverts to Cloud default */
+    fun unloadLocalModel() {
+        prefs.edit().putBoolean(KEY_USE_LOCAL_MODEL, false).apply()
+        _useLocalModel.value = false
+        gemmaManager.dispose()
+    }
 
     /** Initializes on-device model */
     suspend fun initialize() = gemmaManager.initialize()
@@ -59,17 +108,17 @@ class NanoNutritionistCoach(
         userQuery: String,
         offlineFallback: () -> String
     ): String {
-        // Tier 1: Gemma 4 E2B (on-device)
-        if (gemmaManager.isReady) {
+        // Tier 1: Gemma 4 on-device (ONLY if user opted-in and model is loaded/ready)
+        if (_useLocalModel.value && gemmaManager.isReady) {
             val result = gemmaManager.generateContent(systemPrompt, userQuery)
             if (!result.isNullOrBlank()) {
-                Log.d(TAG, "✅ Responded via Gemma 4 E2B (on-device)")
-                return "⚡ [Gemma 4 E2B]\n$result"
+                Log.d(TAG, "✅ Responded via Gemma 4 (on-device)")
+                return "⚡ [Gemma 4]\n$result"
             }
-            Log.w(TAG, "Gemma 4 E2B returned empty. Falling back to cloud.")
+            Log.w(TAG, "Gemma 4 returned empty. Falling back to cloud.")
         }
 
-        // Tier 2: Cloud Groq API
+        // Tier 2: Cloud Groq API (Default)
         return try {
             val apiMessages = listOf(
                 com.example.healthheatv2.network.ApiChatMessage(role = "system", content = systemPrompt),

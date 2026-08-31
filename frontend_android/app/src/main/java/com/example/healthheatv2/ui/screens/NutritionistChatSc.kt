@@ -53,9 +53,25 @@ fun NutritionistChatScreen(
 ) {
     var selectedTab by remember { mutableStateOf(0) } // 0 = Dashboard, 1 = Chat
     val colors = LocalAppColors.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var showClearDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // ── Local Model Detection on Tab Open ──────────────────────────────────────
+    val modelManager = remember { com.example.healthheatv2.ai.LLMModelManager(context) }
+    var detectedModelInfo by remember { mutableStateOf<com.example.healthheatv2.ai.LLMModelManager.ModelInfo?>(null) }
+    var showModelDetectedDialog by remember { mutableStateOf(false) }
+    val useLocalModel by nanoCoach.useLocalModel.collectAsState()
+
+    LaunchedEffect(Unit) {
+        val detected = modelManager.findSideloadedModel()
+        detectedModelInfo = detected
+        // If a local model is detected on disk, local mode is off, and user hasn't made a choice yet:
+        if (detected != null && !nanoCoach.useLocalModel.value && !nanoCoach.hasPromptedLocalModel()) {
+            showModelDetectedDialog = true
+        }
+    }
 
     Scaffold(
         containerColor = colors.background,
@@ -157,6 +173,72 @@ fun NutritionistChatScreen(
                         },
                         containerColor = colors.card,
                         shape = RoundedCornerShape(16.dp)
+                    )
+                }
+
+                // Dialog prompting user if a local Gemma model file is detected on disk
+                if (showModelDetectedDialog && detectedModelInfo != null) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            showModelDetectedDialog = false
+                            nanoCoach.setHasPromptedLocalModel(true)
+                        },
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "⚡ Local Gemma Model Detected",
+                                    color = colors.textPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
+                            }
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    text = "Found on-device model on disk:\n• ${detectedModelInfo?.name} (${detectedModelInfo?.sizeMb?.toInt()} MB)",
+                                    color = colors.accentGreen,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "By default, Nutribot uses fast Cloud AI (0 MB RAM). Would you like to load Gemma into GPU/RAM memory for on-device inference, or keep using Cloud AI?",
+                                    color = colors.textSecondary,
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showModelDetectedDialog = false
+                                    nanoCoach.setHasPromptedLocalModel(true)
+                                    scope.launch {
+                                        nanoCoach.loadLocalModel()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("⚡ Load Model", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        },
+                        dismissButton = {
+                            OutlinedButton(
+                                onClick = {
+                                    showModelDetectedDialog = false
+                                    nanoCoach.setHasPromptedLocalModel(true)
+                                    nanoCoach.unloadLocalModel()
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("☁️ Keep Cloud (Default)", color = colors.textSecondary, fontSize = 13.sp)
+                            }
+                        },
+                        containerColor = colors.card,
+                        shape = RoundedCornerShape(20.dp)
                     )
                 }
 
@@ -762,6 +844,7 @@ fun GemmaDiagnosticsDialog(
     val scope = rememberCoroutineScope()
 
     val modelState by nanoCoach.modelState.collectAsState()
+    val useLocalModel by nanoCoach.useLocalModel.collectAsState()
     val modelManager = remember { com.example.healthheatv2.ai.LLMModelManager(context) }
     var sideloadedInfo by remember { mutableStateOf<com.example.healthheatv2.ai.LLMModelManager.ModelInfo?>(null) }
     var isCheckingSideload by remember { mutableStateOf(true) }
@@ -780,7 +863,7 @@ fun GemmaDiagnosticsDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("⚡ Gemma 4 AI Diagnostics", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("🧠 AI Engine & Model Settings", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
@@ -800,23 +883,31 @@ fun GemmaDiagnosticsDialog(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            val dotColor = when (modelState) {
-                                is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Ready -> colors.accentGreen
-                                is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Downloading -> colors.accentAmber
-                                is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Initializing -> colors.accentBlue
-                                else -> colors.textHint
+                            val dotColor = if (useLocalModel && modelState is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Ready) {
+                                colors.accentGreen
+                            } else if (useLocalModel && modelState is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Initializing) {
+                                colors.accentBlue
+                            } else {
+                                colors.textSecondary
                             }
                             Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(dotColor))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(nanoCoach.getStatusLabel(), color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (useLocalModel) "On-device Gemma inference active (offline & private)."
+                                   else "Cloud AI active (default, fast, 0 MB device memory).",
+                            color = colors.textSecondary,
+                            fontSize = 12.sp
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 2. Sideloaded File Status
-                Text("SIDELOADED MODEL ON DISK", color = colors.textHint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                // 2. Sideloaded File Status & Memory Control
+                Text("ON-DEVICE MODEL MEMORY CONTROLS", color = colors.textHint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -828,13 +919,41 @@ fun GemmaDiagnosticsDialog(
                         if (isCheckingSideload) {
                             Text("Scanning for model files...", color = colors.textSecondary, fontSize = 13.sp)
                         } else if (sideloadedInfo != null) {
-                            Text("✅ Model Found:", color = colors.accentGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("✅ Local Model Detected on Disk:", color = colors.accentGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             Text("${sideloadedInfo?.name} (${sideloadedInfo?.sizeMb?.toInt()} MB)", color = colors.textPrimary, fontSize = 13.sp)
                             Text("${sideloadedInfo?.file?.absolutePath}", color = colors.textHint, fontSize = 11.sp)
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            if (useLocalModel) {
+                                Button(
+                                    onClick = {
+                                        nanoCoach.unloadLocalModel()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.accentRed.copy(alpha = 0.85f)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().height(38.dp)
+                                ) {
+                                    Text("🛑 Unload Model (Free GPU/RAM Memory)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            nanoCoach.loadLocalModel()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().height(38.dp)
+                                ) {
+                                    Text("⚡ Load Model into GPU Memory", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         } else {
-                            Text("❌ No sideloaded model found.", color = colors.accentAmber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("❌ No sideloaded model found on disk.", color = colors.accentAmber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Using Cloud / AICore download.", color = colors.textSecondary, fontSize = 12.sp)
+                            Text("Cloud AI is active. Sideload a Gemma model via ADB to test on-device execution.", color = colors.textSecondary, fontSize = 12.sp)
                         }
                     }
                 }
@@ -921,20 +1040,6 @@ fun GemmaDiagnosticsDialog(
                             Text(testBenchmarkResult ?: "", color = colors.textPrimary, fontSize = 12.sp, lineHeight = 17.sp)
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            nanoCoach.initialize()
-                            sideloadedInfo = modelManager.findSideloadedModel()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(38.dp),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("🔄 Re-initialize / Retry Model Check", fontSize = 12.sp)
                 }
             }
         },
