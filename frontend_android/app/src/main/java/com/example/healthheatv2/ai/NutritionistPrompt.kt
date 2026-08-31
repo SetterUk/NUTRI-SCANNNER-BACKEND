@@ -86,11 +86,11 @@ USER CLINICAL PROFILE:
 
     private val outputRules = """
 DIRECT INSTRUCTIONS:
-1. When asked about BMI, BMR, daily targets, calorie/protein needs, or diet plans, report the exact numbers from USER CLINICAL PROFILE above directly and explain what they mean for the user's goal.
-2. Recommend authentic Indian foods that fit their diet type and strictly avoid their allergies.
-3. Keep advice tailored to their specific Health Conditions.
+1. When asked about BMI, BMR, targets, health stats, or MEAL PLANS (daily or weekly), provide the answer directly using the USER CLINICAL PROFILE and authentic Indian IFCT foods.
+2. If asked for a meal plan (e.g., 7 days or daily menu), give a clear, practical Indian menu structure (Breakfast, Lunch, Snack, Dinner) customized to their goal, diet type, and allergies.
+3. NEVER suggest any food containing their listed ALLERGIES or contrary to their DIET TYPE.
 4. Respond in PLAIN TEXT ONLY. No markdown, no bold, no asterisks, no hash symbols.
-5. Keep your tone warm, encouraging, expert, and under 150 words.
+5. Keep your tone warm, encouraging, expert, and structured.
     """.trimIndent()
 
     // ── 1. CHAT PROMPT ────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ DIRECT INSTRUCTIONS:
         val context = buildUserContextJson(profile, intake, gaps, todayMeals, icmrRule, eligibleFoods)
 
         return """
-You are NutriBot, the user's personal nutrition tracking companion. You already have access to all their verified metrics below. Answer their questions directly using these numbers.
+You are NutriBot, the user's personal nutrition and meal planning coach. You already have access to all their verified metrics and IFCT Indian food database below. Provide direct diet plans and nutrition guidance.
 
 $context
 
