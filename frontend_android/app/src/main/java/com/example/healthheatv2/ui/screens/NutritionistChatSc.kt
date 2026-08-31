@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,8 +39,17 @@ import com.example.healthheatv2.services.NutritionEngine
 import com.example.healthheatv2.services.NutritionGap
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 
-data class ChatMessage(val text: String, val isUser: Boolean)
+data class ChatMessage(
+    val text: String,
+    val isUser: Boolean,
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val isStreaming: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -345,9 +355,27 @@ private fun TabSegment(text: String, isSelected: Boolean, modifier: Modifier, on
     }
 }
 
-// Global state for chat messages so they persist when switching tabs
+// Global state for chat messages & active generation so they persist when switching tabs
 private val sharedChatMessages = mutableStateListOf<ChatMessage>()
 private var hasInitializedChat = false
+private var activeGenerationJob: kotlinx.coroutines.Job? = null
+private var isCurrentlyGenerating by mutableStateOf(false)
+
+private fun terminateActiveGeneration() {
+    activeGenerationJob?.cancel()
+    activeGenerationJob = null
+    isCurrentlyGenerating = false
+    val streamingIndex = sharedChatMessages.indexOfLast { it.isStreaming }
+    if (streamingIndex != -1) {
+        val currentMsg = sharedChatMessages[streamingIndex]
+        val finalText = if (currentMsg.text.isNotBlank()) {
+            "${currentMsg.text}\n\n*(Generation stopped)*"
+        } else {
+            "*(Generation stopped)*"
+        }
+        sharedChatMessages[streamingIndex] = currentMsg.copy(text = finalText, isStreaming = false)
+    }
+}
 
 @Composable
 private fun ChatContent(
@@ -367,19 +395,21 @@ private fun ChatContent(
     }
 
     LaunchedEffect(Unit) {
-        val history = nutritionEngine.getChatHistory()
-        sharedChatMessages.clear()
-        if (history.isEmpty()) {
-            val welcomeMsg = "Hi! I'm your AI Nutritionist. Check your dashboard to see your daily streaks and missing nutrients, or ask me anything here!"
-            sharedChatMessages.add(ChatMessage(welcomeMsg, false))
-            nutritionEngine.saveChatMessage(welcomeMsg, false)
-        } else {
-            sharedChatMessages.addAll(history.map { ChatMessage(it.text, it.isUser) })
+        if (!hasInitializedChat || sharedChatMessages.isEmpty()) {
+            val history = nutritionEngine.getChatHistory()
+            sharedChatMessages.clear()
+            if (history.isEmpty()) {
+                val welcomeMsg = "Hi! I'm your AI Nutritionist. Check your dashboard to see your daily streaks and missing nutrients, or ask me anything here!"
+                sharedChatMessages.add(ChatMessage(welcomeMsg, false, isStreaming = false))
+                nutritionEngine.saveChatMessage(welcomeMsg, false)
+            } else {
+                sharedChatMessages.addAll(history.map { ChatMessage(it.text, it.isUser, it.id.toString(), isStreaming = false) })
+            }
+            hasInitializedChat = true
         }
-        coach.initialize()
     }
 
-    LaunchedEffect(sharedChatMessages.size) {
+    LaunchedEffect(sharedChatMessages.size, sharedChatMessages.lastOrNull()?.text) {
         if (sharedChatMessages.isNotEmpty()) {
             listState.animateScrollToItem(sharedChatMessages.size - 1)
         }
@@ -396,20 +426,20 @@ private fun ChatContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 16.dp, start = 16.dp, end = 16.dp, top = 8.dp)
     ) {
-        items(sharedChatMessages) { msg ->
+        itemsIndexed(
+            items = sharedChatMessages,
+            key = { _, msg -> msg.id }
+        ) { _, msg ->
             val isSpeakingThis = currentlySpeakingText == msg.text
-            AnimatedVisibility(
-                visible = true,
-                enter = fadeIn() + slideInHorizontally(initialOffsetX = { if (msg.isUser) it else -it }),
-            ) {
-                ChatBubble(
-                    message = msg,
-                    isSpeaking = isSpeakingThis,
-                    onToggleTTS = {
-                        voiceCoach.toggleTTS(msg.text, msg.text)
-                    }
-                )
-            }
+
+            ChatBubble(
+                message = msg,
+                isSpeaking = isSpeakingThis,
+                onStopGeneration = { terminateActiveGeneration() },
+                onToggleTTS = {
+                    voiceCoach.toggleTTS(msg.text, msg.text)
+                }
+            )
             Spacer(modifier = Modifier.height(12.dp))
         }
     }
@@ -425,7 +455,6 @@ private fun ChatInputBar(
     onFoodLogged: () -> Unit
 ) {
     var inputText by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val colors = LocalAppColors.current
@@ -438,22 +467,11 @@ private fun ChatInputBar(
         label = "chatInputBottomPadding"
     )
 
-    val infiniteTransition = rememberInfiniteTransition(label = "sendGlow")
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowAlpha"
-    )
-
-    val isSendActive = !isLoading && (isListening || inputText.isNotBlank())
+    val isSendActive = inputText.isNotBlank() && !isCurrentlyGenerating
     val sendButtonColor = when {
-        isLoading -> colors.surface
-        isListening -> colors.accentGreen.copy(alpha = glowAlpha)
-        inputText.isNotBlank() -> colors.accentGreen
+        isCurrentlyGenerating -> colors.accentRed
+        isListening -> colors.accentRed
+        isSendActive -> colors.accentGreen
         else -> colors.surface
     }
 
@@ -461,8 +479,8 @@ private fun ChatInputBar(
         color = Color.Transparent,
         modifier = Modifier
             .fillMaxWidth()
-            .imePadding()
             .navigationBarsPadding()
+            .imePadding()
     ) {
         Row(
             modifier = Modifier
@@ -470,189 +488,250 @@ private fun ChatInputBar(
                 .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = animatedBottomPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Cancel / Delete Button appearing on the other end (Left) of the textbox while recording
+            // Cancel Voice Button (Visible only when listening)
             AnimatedVisibility(
                 visible = isListening,
-                enter = scaleIn() + fadeIn() + expandHorizontally(),
-                exit = scaleOut() + fadeOut() + shrinkHorizontally()
+                enter = fadeIn() + expandHorizontally(),
+                exit = fadeOut() + shrinkHorizontally()
             ) {
                 Box(
                     modifier = Modifier
                         .padding(end = 8.dp)
-                        .size(40.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
                         .background(colors.accentRed.copy(alpha = 0.15f))
-                        .border(1.dp, colors.accentRed.copy(alpha = 0.4f), CircleShape)
-                        .clickable {
-                            voiceCoach.cancelVoiceInput()
-                            isListening = false
+                        .border(1.dp, colors.accentRed.copy(alpha = 0.5f), CircleShape)
+                    .clickable {
+                        voiceCoach.cancelVoiceInput()
+                        isListening = false
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "Cancel Recording",
+                    tint = colors.accentRed,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = colors.card.copy(alpha = 0.8f),
+            border = BorderStroke(1.dp, if (isListening) colors.accentRed.copy(alpha = 0.5f) else colors.border),
+            modifier = Modifier.weight(1f)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                TextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { 
+                        Text(
+                            when {
+                                isCurrentlyGenerating -> "Generating response... (tap ⏹ to stop)"
+                                isListening -> "Listening... (tap 🗑️ to cancel)"
+                                else -> "Ask Nutribot..."
+                            }, 
+                            color = if (isListening) colors.accentRed else colors.textHint, 
+                            fontSize = 15.sp 
+                        ) 
+                    },
+                    enabled = !isCurrentlyGenerating && !isListening,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
+                        cursorColor = colors.accentGreen
+                    )
+                )
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                fun sendUserMessage(text: String) {
+                    val clean = text.trim()
+                    if (clean.isBlank() || isCurrentlyGenerating) return
+                    sharedChatMessages.add(ChatMessage(clean, true, isStreaming = false))
+                    inputText = ""
+                    
+                    val botMsgId = java.util.UUID.randomUUID().toString()
+                    val placeholderBotMsg = ChatMessage(text = "", isUser = false, id = botMsgId, isStreaming = true)
+                    sharedChatMessages.add(placeholderBotMsg)
+                    isCurrentlyGenerating = true
+
+                    activeGenerationJob = scope.launch {
+                        nutritionEngine.saveChatMessage(clean, true)
+                        try {
+                            val response = nanoCoach.generateNutriBotResponse(
+                                sharedChatMessages.filter { it.text.isNotBlank() }.toList(),
+                                userProfile,
+                                nutritionEngine
+                            )
+                            
+                            val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
+                            val match = logFoodRegex.find(response)
+                            var finalResponse = response
+                            if (match != null) {
+                                val foodName = match.groupValues[1]
+                                finalResponse = finalResponse.replace(match.value, "").trim()
+                                val success = nutritionEngine.searchAndLogFood(foodName)
+                                if (success) {
+                                    finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
+                                    onFoodLogged()
+                                } else {
+                                    finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
+                                }
+                            }
+
+                            // Stream tokens into the active message in real-time
+                            var streamedText = ""
+                            val chunkSize = if (finalResponse.length > 400) 4 else 2
+                            var i = 0
+                            while (i < finalResponse.length && isActive) {
+                                val end = minOf(i + chunkSize, finalResponse.length)
+                                streamedText += finalResponse.substring(i, end)
+                                i = end
+                                val curIndex = sharedChatMessages.indexOfFirst { it.id == botMsgId }
+                                if (curIndex != -1) {
+                                    sharedChatMessages[curIndex] = sharedChatMessages[curIndex].copy(text = streamedText, isStreaming = true)
+                                }
+                                delay(16)
+                            }
+
+                            val finalIndex = sharedChatMessages.indexOfFirst { it.id == botMsgId }
+                            if (finalIndex != -1) {
+                                sharedChatMessages[finalIndex] = sharedChatMessages[finalIndex].copy(text = finalResponse, isStreaming = false)
+                            }
+                            nutritionEngine.saveChatMessage(finalResponse, false)
+                        } catch (e: CancellationException) {
+                            val curIndex = sharedChatMessages.indexOfFirst { it.id == botMsgId }
+                            if (curIndex != -1) {
+                                val partialText = sharedChatMessages[curIndex].text
+                                val savedText = if (partialText.isNotBlank()) "$partialText\n\n*(Generation stopped)*" else "*(Generation stopped)*"
+                                sharedChatMessages[curIndex] = sharedChatMessages[curIndex].copy(text = savedText, isStreaming = false)
+                                nutritionEngine.saveChatMessage(savedText, false)
+                            }
+                        } catch (e: Exception) {
+                            val errMsg = "Sorry, I encountered an error: ${e.message}"
+                            val curIndex = sharedChatMessages.indexOfFirst { it.id == botMsgId }
+                            if (curIndex != -1) {
+                                sharedChatMessages[curIndex] = sharedChatMessages[curIndex].copy(text = errMsg, isStreaming = false)
+                            } else {
+                                sharedChatMessages.add(ChatMessage(errMsg, false, isStreaming = false))
+                            }
+                            nutritionEngine.saveChatMessage(errMsg, false)
+                        } finally {
+                            isCurrentlyGenerating = false
+                            activeGenerationJob = null
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(sendButtonColor)
+                        .then(
+                            if (isListening || isCurrentlyGenerating) Modifier.border(1.5.dp, colors.accentRed, CircleShape)
+                            else Modifier
+                        )
+                        .clickable(enabled = isCurrentlyGenerating || isSendActive) {
+                            if (isCurrentlyGenerating) {
+                                terminateActiveGeneration()
+                            } else if (isListening) {
+                                voiceCoach.finishVoiceInput()
+                            } else {
+                                sendUserMessage(inputText)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isCurrentlyGenerating) {
+                        Icon(
+                            Icons.Filled.Stop, 
+                            contentDescription = "Stop Generating", 
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send, 
+                            contentDescription = "Send", 
+                            tint = if (isSendActive) Color.White else colors.textHint,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                // Microphone Button
+                val micPermissionState = com.google.accompanist.permissions.rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(if (isListening) Color.Red else colors.surface)
+                        .clickable(enabled = !isCurrentlyGenerating) {
+                            if (isListening) {
+                                voiceCoach.cancelVoiceInput()
+                                isListening = false
+                            } else if (!micPermissionState.status.isGranted) {
+                                micPermissionState.launchPermissionRequest()
+                            } else {
+                                isListening = true
+                                voiceCoach.startVoiceInput(
+                                    onResult = { result ->
+                                        isListening = false
+                                        sendUserMessage(result)
+                                    },
+                                    onError = { _ ->
+                                        isListening = false
+                                    }
+                                )
+                            }
                         },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Cancel Recording",
-                        tint = colors.accentRed,
+                        Icons.Filled.Mic, 
+                        contentDescription = "Mic", 
+                        tint = if (isListening) Color.White else colors.textPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
             }
-
-            Surface(
-                shape = RoundedCornerShape(32.dp),
-                color = colors.card.copy(alpha = 0.8f),
-                border = BorderStroke(1.dp, if (isListening) colors.accentRed.copy(alpha = 0.5f) else colors.border),
-                modifier = Modifier.weight(1f)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    TextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { 
-                            Text(
-                                if (isListening) "Listening... (tap 🗑️ to cancel)" else "Ask Nutribot...", 
-                                color = if (isListening) colors.accentRed else colors.textHint, 
-                                fontSize = 15.sp 
-                            ) 
-                        },
-                        enabled = !isLoading && !isListening,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent,
-                            focusedTextColor = colors.textPrimary,
-                            unfocusedTextColor = colors.textPrimary,
-                            cursorColor = colors.accentGreen
-                        )
-                    )
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    fun sendUserMessage(text: String) {
-                        val clean = text.trim()
-                        if (clean.isBlank() || isLoading) return
-                        sharedChatMessages.add(ChatMessage(clean, true))
-                        inputText = ""
-                        isLoading = true
-                        scope.launch {
-                            nutritionEngine.saveChatMessage(clean, true)
-                            try {
-                                val response = nanoCoach.generateNutriBotResponse(sharedChatMessages.toList(), userProfile, nutritionEngine)
-                                val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
-                                val match = logFoodRegex.find(response)
-                                var finalResponse = response
-                                if (match != null) {
-                                    val foodName = match.groupValues[1]
-                                    finalResponse = finalResponse.replace(match.value, "").trim()
-                                    val success = nutritionEngine.searchAndLogFood(foodName)
-                                    if (success) {
-                                        finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
-                                        onFoodLogged()
-                                    } else {
-                                        finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
-                                    }
-                                }
-                                sharedChatMessages.add(ChatMessage(finalResponse, false))
-                                nutritionEngine.saveChatMessage(finalResponse, false)
-                            } catch (e: Exception) {
-                                val errMsg = "Sorry, I encountered an error: ${e.message}"
-                                sharedChatMessages.add(ChatMessage(errMsg, false))
-                                nutritionEngine.saveChatMessage(errMsg, false)
-                            } finally {
-                                isLoading = false
-                            }
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(sendButtonColor)
-                            .then(
-                                if (isListening) Modifier.border(1.5.dp, colors.accentGreen, CircleShape)
-                                else Modifier
-                            )
-                            .clickable(enabled = isSendActive && !isLoading) {
-                                if (isListening) {
-                                    voiceCoach.finishVoiceInput()
-                                } else {
-                                    sendUserMessage(inputText)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(color = colors.textSecondary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Send, 
-                                contentDescription = "Send", 
-                                tint = if (isSendActive) Color.White else colors.textHint,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    // Microphone Button
-                    val micPermissionState = com.google.accompanist.permissions.rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (isListening) Color.Red else colors.surface)
-                            .clickable(enabled = !isLoading) {
-                                if (isListening) {
-                                    voiceCoach.cancelVoiceInput()
-                                    isListening = false
-                                } else if (!micPermissionState.status.isGranted) {
-                                    micPermissionState.launchPermissionRequest()
-                                } else {
-                                    isListening = true
-                                    voiceCoach.startVoiceInput(
-                                        onResult = { result ->
-                                            isListening = false
-                                            sendUserMessage(result)
-                                        },
-                                        onError = { _ ->
-                                            isListening = false
-                                        }
-                                    )
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Filled.Mic, 
-                            contentDescription = "Mic", 
-                            tint = if (isListening) Color.White else colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
         }
     }
+}
 }
 
 @Composable
 fun ChatBubble(
     message: ChatMessage,
     isSpeaking: Boolean = false,
+    onStopGeneration: () -> Unit = {},
     onToggleTTS: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val timeFormatter = remember { java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()) }
     val timeString = remember { timeFormatter.format(java.util.Date()) }
+
+    val textParts = message.text.split("</think>")
+    val hasThink = textParts.size > 1 && message.text.contains("<think>")
+    val thinkText = if (hasThink) textParts[0].substringAfter("<think>").trim() else null
+    val rawMainText = if (hasThink) textParts[1].trim() else message.text
+    val mainText = rawMainText.replace(Regex("[*#_~`]"), "") // Strip all markdown symbols to ensure purely clean text
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -684,17 +763,52 @@ fun ChatBubble(
                 ),
                 color = if (message.isUser) colors.accentGreen else colors.card,
                 border = if (!message.isUser) BorderStroke(1.dp, colors.border) else null,
-                modifier = Modifier.widthIn(max = 270.dp)
+                modifier = Modifier.widthIn(max = 280.dp)
             ) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    val textParts = message.text.split("</think>")
-                    val hasThink = textParts.size > 1 && message.text.contains("<think>")
-                    val thinkText = if (hasThink) textParts[0].substringAfter("<think>").trim() else null
-                    val rawMainText = if (hasThink) textParts[1].trim() else message.text
-                    val mainText = rawMainText.replace(Regex("[*#_~`]"), "") // Strip all markdown symbols to ensure purely clean text
-                    
+                    // Active streaming placeholder (Waiting for initial tokens)
+                    if (message.isStreaming && mainText.isBlank()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = colors.accentGreen,
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Thinking...",
+                                color = colors.textSecondary,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = colors.accentRed.copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, colors.accentRed.copy(alpha = 0.4f)),
+                                modifier = Modifier.clickable { onStopGeneration() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Stop,
+                                        contentDescription = "Stop",
+                                        tint = colors.accentRed,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Stop", color = colors.accentRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
                     if (thinkText != null && thinkText.isNotBlank()) {
-                        var showThinking by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                        var showThinking by androidx.compose.runtime.saveable.rememberSaveable(message.id) { mutableStateOf(false) }
                         
                         Row(
                             modifier = Modifier
@@ -737,29 +851,42 @@ fun ChatBubble(
                     }
 
                     if (mainText.isNotBlank()) {
-                        var displayedText by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
-                        var animationCompleted by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-                        
-                        LaunchedEffect(mainText) {
-                            if (!message.isUser && !animationCompleted) {
-                                displayedText = ""
-                                // Typewriter effect
-                                for (i in mainText.indices) {
-                                    displayedText += mainText[i]
-                                    kotlinx.coroutines.delay(10) // Typewriter speed
-                                }
-                                animationCompleted = true
-                            } else {
-                                displayedText = mainText
-                            }
-                        }
-
                         Text(
-                            text = displayedText,
+                            text = mainText,
                             color = if (message.isUser) Color.White else colors.textPrimary,
                             fontSize = 15.sp,
                             lineHeight = 22.sp
                         )
+
+                        // If actively generating tokens in real-time, show terminate button below bubble
+                        if (message.isStreaming) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = colors.accentRed.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, colors.accentRed.copy(alpha = 0.35f)),
+                                modifier = Modifier.clickable { onStopGeneration() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Stop,
+                                        contentDescription = "Stop",
+                                        tint = colors.accentRed,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Stop Generating",
+                                        color = colors.accentRed,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -772,8 +899,8 @@ fun ChatBubble(
             )
         }
 
-        // Speaker / Stop button on the right of bot messages
-        if (!message.isUser) {
+        // Speaker / Stop button on the right of completed bot messages
+        if (!message.isUser && !message.isStreaming && mainText.isNotBlank()) {
             Spacer(modifier = Modifier.width(6.dp))
             Box(
                 modifier = Modifier
