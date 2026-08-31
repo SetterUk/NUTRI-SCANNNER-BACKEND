@@ -1,6 +1,7 @@
 package com.example.healthheatv2.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,7 +58,7 @@ fun NutritionistChatScreen(
 
     Scaffold(
         containerColor = colors.background,
-        contentWindowInsets = WindowInsets.ime, // Let insets handle keyboard
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             Column {
                 Row(
@@ -198,6 +200,8 @@ private var hasInitializedChat = false
 @Composable
 private fun ChatContent(coach: NanoNutritionistCoach, nutritionEngine: NutritionEngine) {
     val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val isImeVisible = WindowInsets.ime.getBottom(density) > 0
 
     LaunchedEffect(Unit) {
         if (!hasInitializedChat) {
@@ -220,10 +224,16 @@ private fun ChatContent(coach: NanoNutritionistCoach, nutritionEngine: Nutrition
         }
     }
 
+    LaunchedEffect(isImeVisible) {
+        if (isImeVisible && sharedChatMessages.isNotEmpty()) {
+            listState.animateScrollToItem(sharedChatMessages.size - 1)
+        }
+    }
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 120.dp, start = 16.dp, end = 16.dp, top = 8.dp)
+        contentPadding = PaddingValues(bottom = 16.dp, start = 16.dp, end = 16.dp, top = 8.dp)
     ) {
         items(sharedChatMessages) { msg ->
             AnimatedVisibility(
@@ -252,16 +262,25 @@ private fun ChatInputBar(
     val scope = rememberCoroutineScope()
     val colors = LocalAppColors.current
 
+    val density = LocalDensity.current
+    val isKeyboardOpen = WindowInsets.ime.getBottom(density) > 0
+
+    val animatedBottomPadding by animateDpAsState(
+        targetValue = if (isKeyboardOpen) 10.dp else 90.dp,
+        label = "chatInputBottomPadding"
+    )
+
     Surface(
         color = Color.Transparent,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .imePadding()
+            .navigationBarsPadding()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .navigationBarsPadding()
-                .padding(bottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding().let { if (it > 0.dp) 0.dp else 16.dp }),
+                .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = animatedBottomPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
