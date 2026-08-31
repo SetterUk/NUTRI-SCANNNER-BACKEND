@@ -1,14 +1,13 @@
 package com.example.healthheatv2.ai
 
 import com.example.healthheatv2.data.UserProfile
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NutritionistPromptTest {
 
     @Test
-    fun testCoachConsidersUserProfile() {
+    fun testChatPromptContainsUserAllergiesAndDiet() {
         val vegProfile = UserProfile(
             age = 28,
             sex = "M",
@@ -26,15 +25,23 @@ class NutritionistPromptTest {
         )
 
         val promptBuilder = NutritionistPrompt()
-        val currentContext = CurrentContext()
-        val systemPrompt = promptBuilder.buildSystemPrompt(vegProfile, currentContext)
+        val systemPrompt = promptBuilder.buildChatSystemPrompt(
+            profile = vegProfile,
+            intake = null,
+            gaps = null,
+            todayMeals = emptyList(),
+            icmrRule = null,
+            eligibleFoods = emptyList(),
+            chatHistory = emptyList()
+        )
 
         assertTrue(systemPrompt.contains("vegan", ignoreCase = true))
         assertTrue(systemPrompt.contains("peanuts", ignoreCase = true))
+        assertTrue(systemPrompt.contains("PLAIN TEXT ONLY"))
     }
 
     @Test
-    fun testCoachReferencesHealthGoals() {
+    fun testMealPlanPromptContainsTargets() {
         val muscleGainProfile = UserProfile(
             age = 30,
             sex = "M",
@@ -49,19 +56,27 @@ class NutritionistPromptTest {
             dislikedFoods = emptyList(),
             preferredCuisines = emptyList(),
             healthTags = emptyList(),
-            dailyProtein = 180f
+            dailyProtein = 180f,
+            dailyCalories = 2500f
         )
 
         val promptBuilder = NutritionistPrompt()
-        val currentContext = CurrentContext()
-        val systemPrompt = promptBuilder.buildSystemPrompt(muscleGainProfile, currentContext)
+        val systemPrompt = promptBuilder.buildMealPlanPrompt(
+            profile = muscleGainProfile,
+            intake = null,
+            gaps = null,
+            todayMeals = emptyList(),
+            icmrRule = null,
+            eligibleFoods = emptyList()
+        )
 
         assertTrue(systemPrompt.contains("muscle_gain"))
-        assertTrue(systemPrompt.contains("180 g"))
+        assertTrue(systemPrompt.contains("180"))
+        assertTrue(systemPrompt.contains("2500"))
     }
 
     @Test
-    fun testCoachRefuseMedicalDiagnosisInPrompt() {
+    fun testPromptEnforcesStrictMedicalSafetyRules() {
         val profile = UserProfile(
             age = 40,
             sex = "F",
@@ -79,11 +94,17 @@ class NutritionistPromptTest {
         )
 
         val promptBuilder = NutritionistPrompt()
-        val currentContext = CurrentContext()
-        val systemPrompt = promptBuilder.buildSystemPrompt(profile, currentContext)
+        val systemPrompt = promptBuilder.buildChatSystemPrompt(
+            profile = profile,
+            intake = null,
+            gaps = null,
+            todayMeals = emptyList(),
+            icmrRule = null,
+            eligibleFoods = emptyList(),
+            chatHistory = emptyList()
+        )
 
-        assertTrue(systemPrompt.contains("NEVER diagnose conditions"))
-        assertTrue(systemPrompt.contains("NEVER prescribe medications"))
-        assertTrue(systemPrompt.contains("talk to your doctor"))
+        assertTrue(systemPrompt.contains("NEVER diagnose conditions or prescribe medications"))
+        assertTrue(systemPrompt.contains("consulting a doctor"))
     }
 }

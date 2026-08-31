@@ -12,18 +12,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import com.google.accompanist.permissions.isGranted
@@ -78,27 +72,49 @@ fun NutritionistChatScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
                     }
-                    val downloadState by nanoCoach.downloadState.collectAsState(initial = "Initializing...")
-                    
+                    val statusLabel by nanoCoach.modelState.collectAsState()
+                    val statusText = nanoCoach.getStatusLabel()
+                    var showDiagnosticsDialog by remember { mutableStateOf(false) }
+
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .padding(start = 8.dp)
+                            .clickable { showDiagnosticsDialog = true }
                     ) {
-                        Text(
-                            text = "Nutribot",
-                            color = colors.textPrimary,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        AnimatedVisibility(visible = downloadState.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = downloadState,
-                                color = if (downloadState.contains("Ready")) colors.accentGreen else colors.textHint,
+                                text = "Nutribot",
+                                color = colors.textPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Filled.Info,
+                                contentDescription = "AI Diagnostics",
+                                tint = colors.textHint,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        AnimatedVisibility(visible = statusText.isNotBlank()) {
+                            Text(
+                                text = "$statusText  ›",
+                                color = if (statusText.contains("Gemma") || statusText.contains("Ready"))
+                                    colors.accentGreen else colors.textHint,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
+                    }
+
+                    if (showDiagnosticsDialog) {
+                        GemmaDiagnosticsDialog(
+                            nanoCoach = nanoCoach,
+                            userProfile = userProfile,
+                            nutritionEngine = nutritionEngine,
+                            onDismiss = { showDiagnosticsDialog = false }
+                        )
                     }
 
                     // Clear Chat Button on the right end
@@ -207,6 +223,7 @@ fun NutritionistChatScreen(
                                 DashboardSc(
                                     userProfile = userProfile,
                                     nutritionEngine = nutritionEngine,
+                                    nanoCoach = nanoCoach,
                                     onFixMyNutritionClick = onFixMyNutritionClick,
                                     refreshTrigger = refreshTrigger
                                 )
@@ -268,18 +285,16 @@ private fun ChatContent(
     }
 
     LaunchedEffect(Unit) {
-        if (!hasInitializedChat) {
-            coach.initialize()
-            val history = nutritionEngine.getChatHistory()
-            if (history.isEmpty()) {
-                val welcomeMsg = "Hi! I'm your AI Nutritionist. Check your dashboard to see your daily streaks and missing nutrients, or ask me anything here!"
-                sharedChatMessages.add(ChatMessage(welcomeMsg, false))
-                nutritionEngine.saveChatMessage(welcomeMsg, false)
-            } else {
-                sharedChatMessages.addAll(history.map { ChatMessage(it.text, it.isUser) })
-            }
-            hasInitializedChat = true
+        val history = nutritionEngine.getChatHistory()
+        sharedChatMessages.clear()
+        if (history.isEmpty()) {
+            val welcomeMsg = "Hi! I'm your AI Nutritionist. Check your dashboard to see your daily streaks and missing nutrients, or ask me anything here!"
+            sharedChatMessages.add(ChatMessage(welcomeMsg, false))
+            nutritionEngine.saveChatMessage(welcomeMsg, false)
+        } else {
+            sharedChatMessages.addAll(history.map { ChatMessage(it.text, it.isUser) })
         }
+        coach.initialize()
     }
 
     LaunchedEffect(sharedChatMessages.size) {
@@ -438,6 +453,42 @@ private fun ChatInputBar(
                     
                     Spacer(modifier = Modifier.width(8.dp))
                     
+                    fun sendUserMessage(text: String) {
+                        val clean = text.trim()
+                        if (clean.isBlank() || isLoading) return
+                        sharedChatMessages.add(ChatMessage(clean, true))
+                        inputText = ""
+                        isLoading = true
+                        scope.launch {
+                            nutritionEngine.saveChatMessage(clean, true)
+                            try {
+                                val response = nanoCoach.generateNutriBotResponse(sharedChatMessages.toList(), userProfile, nutritionEngine)
+                                val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
+                                val match = logFoodRegex.find(response)
+                                var finalResponse = response
+                                if (match != null) {
+                                    val foodName = match.groupValues[1]
+                                    finalResponse = finalResponse.replace(match.value, "").trim()
+                                    val success = nutritionEngine.searchAndLogFood(foodName)
+                                    if (success) {
+                                        finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
+                                        onFoodLogged()
+                                    } else {
+                                        finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
+                                    }
+                                }
+                                sharedChatMessages.add(ChatMessage(finalResponse, false))
+                                nutritionEngine.saveChatMessage(finalResponse, false)
+                            } catch (e: Exception) {
+                                val errMsg = "Sorry, I encountered an error: ${e.message}"
+                                sharedChatMessages.add(ChatMessage(errMsg, false))
+                                nutritionEngine.saveChatMessage(errMsg, false)
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -447,44 +498,11 @@ private fun ChatInputBar(
                                 if (isListening) Modifier.border(1.5.dp, colors.accentGreen, CircleShape)
                                 else Modifier
                             )
-                            .clickable(enabled = isSendActive) {
+                            .clickable(enabled = isSendActive && !isLoading) {
                                 if (isListening) {
-                                    // User confirmed sending during voice recording!
                                     voiceCoach.finishVoiceInput()
-                                } else if (inputText.isNotBlank()) {
-                                    val userMsg = inputText
-                                    sharedChatMessages.add(ChatMessage(userMsg, true))
-                                    inputText = ""
-                                    isLoading = true
-                                    scope.launch {
-                                        nutritionEngine.saveChatMessage(userMsg, true)
-                                        try {
-                                            val consumedKcal = nutritionEngine.getTodayIntake().calories
-                                            val response = nanoCoach.generateNutriBotResponse(sharedChatMessages.toList(), userProfile, consumedKcal)
-                                            val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
-                                            val match = logFoodRegex.find(response)
-                                            var finalResponse = response
-                                            if (match != null) {
-                                                val foodName = match.groupValues[1]
-                                                finalResponse = finalResponse.replace(match.value, "").trim()
-                                                val success = nutritionEngine.searchAndLogFood(foodName)
-                                                if (success) {
-                                                    finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
-                                                    onFoodLogged()
-                                                } else {
-                                                    finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
-                                                }
-                                            }
-                                            sharedChatMessages.add(ChatMessage(finalResponse, false))
-                                            nutritionEngine.saveChatMessage(finalResponse, false)
-                                        } catch (e: Exception) {
-                                            val errMsg = "Sorry, I encountered an error: ${e.message}"
-                                            sharedChatMessages.add(ChatMessage(errMsg, false))
-                                            nutritionEngine.saveChatMessage(errMsg, false)
-                                        } finally {
-                                            isLoading = false
-                                        }
-                                    }
+                                } else {
+                                    sendUserMessage(inputText)
                                 }
                             },
                         contentAlignment = Alignment.Center
@@ -512,7 +530,6 @@ private fun ChatInputBar(
                             .background(if (isListening) Color.Red else colors.surface)
                             .clickable(enabled = !isLoading) {
                                 if (isListening) {
-                                    // Clicking active mic button cancels listening
                                     voiceCoach.cancelVoiceInput()
                                     isListening = false
                                 } else if (!micPermissionState.status.isGranted) {
@@ -522,38 +539,7 @@ private fun ChatInputBar(
                                     voiceCoach.startVoiceInput(
                                         onResult = { result ->
                                             isListening = false
-                                            val userMsg = result
-                                            sharedChatMessages.add(ChatMessage(userMsg, true))
-                                            isLoading = true
-                                            scope.launch {
-                                                nutritionEngine.saveChatMessage(userMsg, true)
-                                                try {
-                                                    val consumedKcal = nutritionEngine.getTodayIntake().calories
-                                                    val response = voiceCoach.chatWithVoice(sharedChatMessages.toList(), userProfile, consumedKcal)
-                                                    val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
-                                                    val match = logFoodRegex.find(response)
-                                                    var finalResponse = response
-                                                    if (match != null) {
-                                                        val foodName = match.groupValues[1]
-                                                        finalResponse = finalResponse.replace(match.value, "").trim()
-                                                        val success = nutritionEngine.searchAndLogFood(foodName)
-                                                        if (success) {
-                                                            finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
-                                                            onFoodLogged()
-                                                        } else {
-                                                            finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
-                                                        }
-                                                    }
-                                                    sharedChatMessages.add(ChatMessage(finalResponse, false))
-                                                    nutritionEngine.saveChatMessage(finalResponse, false)
-                                                } catch (e: Exception) {
-                                                    val errMsg = "Error generating response."
-                                                    sharedChatMessages.add(ChatMessage(errMsg, false))
-                                                    nutritionEngine.saveChatMessage(errMsg, false)
-                                                } finally {
-                                                    isLoading = false
-                                                }
-                                            }
+                                            sendUserMessage(result)
                                         },
                                         onError = { _ ->
                                             isListening = false
@@ -762,4 +748,202 @@ fun ChatBubble(
             }
         }
     }
+}
+
+@Composable
+fun GemmaDiagnosticsDialog(
+    nanoCoach: NanoNutritionistCoach,
+    userProfile: UserProfile,
+    nutritionEngine: NutritionEngine,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val colors = LocalAppColors.current
+    val scope = rememberCoroutineScope()
+
+    val modelState by nanoCoach.modelState.collectAsState()
+    val modelManager = remember { com.example.healthheatv2.ai.LLMModelManager(context) }
+    var sideloadedInfo by remember { mutableStateOf<com.example.healthheatv2.ai.LLMModelManager.ModelInfo?>(null) }
+    var isCheckingSideload by remember { mutableStateOf(true) }
+
+    var testBenchmarkResult by remember { mutableStateOf<String?>(null) }
+    var testBenchmarkDurationMs by remember { mutableStateOf<Long?>(null) }
+    var isTestingBenchmark by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        isCheckingSideload = true
+        sideloadedInfo = modelManager.findSideloadedModel()
+        isCheckingSideload = false
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("⚡ Gemma 4 AI Diagnostics", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // 1. Current State
+                Text("CURRENT INFERENCE STATE", color = colors.textHint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val dotColor = when (modelState) {
+                                is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Ready -> colors.accentGreen
+                                is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Downloading -> colors.accentAmber
+                                is com.example.healthheatv2.ai.GemmaInferenceManager.ModelState.Initializing -> colors.accentBlue
+                                else -> colors.textHint
+                            }
+                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(dotColor))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(nanoCoach.getStatusLabel(), color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 2. Sideloaded File Status
+                Text("SIDELOADED MODEL ON DISK", color = colors.textHint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        if (isCheckingSideload) {
+                            Text("Scanning for model files...", color = colors.textSecondary, fontSize = 13.sp)
+                        } else if (sideloadedInfo != null) {
+                            Text("✅ Model Found:", color = colors.accentGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("${sideloadedInfo?.name} (${sideloadedInfo?.sizeMb?.toInt()} MB)", color = colors.textPrimary, fontSize = 13.sp)
+                            Text("${sideloadedInfo?.file?.absolutePath}", color = colors.textHint, fontSize = 11.sp)
+                        } else {
+                            Text("❌ No sideloaded model found.", color = colors.accentAmber, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Using Cloud / AICore download.", color = colors.textSecondary, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 3. ADB Command Helper
+                Text("DEVELOPER ADB PUSH COMMAND", color = colors.textHint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Black.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        val adbCmd = modelManager.getAdbSideloadCommand()
+                        Text(
+                            text = adbCmd,
+                            color = Color(0xFF64FFDA),
+                            fontSize = 11.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("ADB Command", adbCmd)
+                                clipboard.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "Copied ADB command to clipboard!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("📋 Copy Command", fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 4. Live Benchmark
+                Text("TEST INFERENCE BENCHMARK", color = colors.textHint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(
+                    onClick = {
+                        scope.launch {
+                            isTestingBenchmark = true
+                            testBenchmarkResult = null
+                            val start = System.currentTimeMillis()
+                            val testHistory = listOf(ChatMessage("What is the protein content of 100g of moong dal?", true))
+                            val result = nanoCoach.generateNutriBotResponse(testHistory, userProfile, nutritionEngine)
+                            val end = System.currentTimeMillis()
+                            testBenchmarkDurationMs = end - start
+                            testBenchmarkResult = result
+                            isTestingBenchmark = false
+                        }
+                    },
+                    enabled = !isTestingBenchmark,
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen)
+                ) {
+                    if (isTestingBenchmark) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Running Inference...", color = Color.White, fontSize = 13.sp)
+                    } else {
+                        Text("⚡ Run Test Inference", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                if (testBenchmarkResult != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = colors.card,
+                        border = BorderStroke(1.dp, colors.accentGreen.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("⏱️ Latency: ${testBenchmarkDurationMs}ms", color = colors.accentGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(testBenchmarkResult ?: "", color = colors.textPrimary, fontSize = 12.sp, lineHeight = 17.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            nanoCoach.initialize()
+                            sideloadedInfo = modelManager.findSideloadedModel()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("🔄 Re-initialize / Retry Model Check", fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = colors.accentGreen, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = colors.card,
+        shape = RoundedCornerShape(20.dp)
+    )
 }

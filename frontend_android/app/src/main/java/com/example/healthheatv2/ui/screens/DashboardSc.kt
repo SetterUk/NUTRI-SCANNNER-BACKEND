@@ -33,6 +33,7 @@ import com.example.healthheatv2.services.NutritionIntake
 import com.example.healthheatv2.data.LoggedMeal
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
 import java.text.SimpleDateFormat
@@ -42,18 +43,30 @@ import java.util.Locale
 fun DashboardSc(
     userProfile: UserProfile,
     nutritionEngine: NutritionEngine,
+    nanoCoach: com.example.healthheatv2.ai.NanoNutritionistCoach,
     onFixMyNutritionClick: (NutritionGap) -> Unit,
     refreshTrigger: Int = 0
 ) {
     var gaps by remember { mutableStateOf<GapAnalysis?>(null) }
     var intake by remember { mutableStateOf<NutritionIntake?>(null) }
     var historicalMeals by remember { mutableStateOf<List<LoggedMeal>>(emptyList()) }
+    var aiPlanText by remember { mutableStateOf<String?>(null) }
+    var aiPlanLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val colors = LocalAppColors.current
+
+    val todayKey = remember {
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+    }
 
     LaunchedEffect(refreshTrigger) {
         gaps = nutritionEngine.calculateGaps()
         intake = nutritionEngine.getTodayIntake()
         historicalMeals = nutritionEngine.getHistoricalMeals()
+        // Load persisted plan for today
+        val saved = nutritionEngine.getDailyPlan(todayKey)
+        if (saved != null) aiPlanText = saved.planText
     }
 
     val streakDays = remember(historicalMeals) {
@@ -159,8 +172,125 @@ fun DashboardSc(
             
             Spacer(modifier = Modifier.height(24.dp))
 
+            // ── AI Daily Meal Plan Card ────────────────────────────────────
+            AiMealPlanCard(
+                planText = aiPlanText,
+                isLoading = aiPlanLoading,
+                onGenerateClick = {
+                    scope.launch {
+                        aiPlanLoading = true
+                        try {
+                            val plan = nanoCoach.generateMealPlanSuggestion(userProfile, nutritionEngine)
+                            aiPlanText = plan
+                            // Detect which AI tier responded
+                            val tier = when {
+                                plan.startsWith("⚡") -> "gemma4_e2b"
+                                plan.startsWith("☁️") -> "cloud"
+                                else -> "offline"
+                            }
+                            nutritionEngine.saveDailyPlan(todayKey, plan, tier)
+                        } catch (e: Exception) {
+                            aiPlanText = "Could not generate plan. Please try again."
+                        } finally {
+                            aiPlanLoading = false
+                        }
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             gapData.actionableGap?.let { actionable ->
                 HeroActionCard(actionable, onFixMyNutritionClick)
+            }
+        }
+    }
+}
+
+@Composable
+fun AiMealPlanCard(
+    planText: String?,
+    isLoading: Boolean,
+    onGenerateClick: () -> Unit
+) {
+    val colors = LocalAppColors.current
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = colors.card,
+        border = BorderStroke(1.dp, colors.accentGreen.copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Today's AI Meal Plan",
+                        color = colors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Personalized for your goals",
+                        color = colors.textHint,
+                        fontSize = 12.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(colors.accentGreen.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("⚡", fontSize = 18.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            color = colors.accentGreen,
+                            modifier = androidx.compose.ui.Modifier.size(28.dp),
+                            strokeWidth = 2.5.dp
+                        )
+                    }
+                }
+                planText != null -> {
+                    // Strip the tier prefix [⚡ [Gemma 4 E2B], ☁️ [Cloud AI], 🔋 [Offline]]
+                    val cleanPlan = planText
+                        .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
+                        .trim()
+                    Text(
+                        text = cleanPlan,
+                        color = colors.textPrimary,
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TextButton(
+                        onClick = onGenerateClick,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Regenerate", color = colors.accentGreen, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                else -> {
+                    Button(
+                        onClick = onGenerateClick,
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.accentGreen)
+                    ) {
+                        Text("Get My Meal Plan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
             }
         }
     }

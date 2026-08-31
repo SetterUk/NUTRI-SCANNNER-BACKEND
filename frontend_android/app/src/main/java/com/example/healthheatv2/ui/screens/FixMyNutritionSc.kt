@@ -30,22 +30,36 @@ import kotlinx.coroutines.launch
 fun FixMyNutritionSc(
     gap: NutritionGap,
     recommendationEngine: RecommendationEngine,
+    nanoCoach: com.example.healthheatv2.ai.NanoNutritionistCoach,
+    userProfile: com.example.healthheatv2.data.UserProfile,
     onBackClick: () -> Unit
 ) {
     val colors = LocalAppColors.current
     var candidates by remember { mutableStateOf<List<MealCandidate>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var aiRationale by remember { mutableStateOf<String?>(null) }
+    var rationaleLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(gap) {
         scope.launch {
             isLoading = true
-            // Generate recommendations filtering for user allergies & remaining calories
             candidates = recommendationEngine.generateRecommendations(
                 biggestGap = gap,
-                remainingCalories = 500f // Assume user has 500 cals left for this meal
+                remainingCalories = 500f
             )
             isLoading = false
+            // Auto-generate AI rationale once we have food candidates
+            if (candidates.isNotEmpty()) {
+                rationaleLoading = true
+                try {
+                    aiRationale = nanoCoach.generateFixMyNutritionRationale(gap, candidates, userProfile)
+                } catch (e: Exception) {
+                    aiRationale = null
+                } finally {
+                    rationaleLoading = false
+                }
+            }
         }
     }
 
@@ -125,6 +139,14 @@ fun FixMyNutritionSc(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            // AI Rationale Card
+            item {
+                AiRationaleCard(
+                    rationale = aiRationale,
+                    isLoading = rationaleLoading
                 )
             }
 
@@ -224,6 +246,55 @@ fun MealCandidateCard(candidate: MealCandidate) {
                 ) {
                     Text("Allergen Free", color = colors.textSecondary, fontSize = 12.sp)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AiRationaleCard(rationale: String?, isLoading: Boolean) {
+    val colors = LocalAppColors.current
+    if (!isLoading && rationale == null) return
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.accentGreen.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, colors.accentGreen.copy(alpha = 0.25f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("⚡", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Why These Foods?",
+                    color = colors.accentGreen,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = colors.accentGreen,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            } else if (rationale != null) {
+                val cleanRationale = rationale
+                    .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
+                    .trim()
+                Text(
+                    text = cleanRationale,
+                    color = colors.textPrimary,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp
+                )
             }
         }
     }

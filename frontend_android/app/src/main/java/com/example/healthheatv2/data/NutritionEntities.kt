@@ -201,3 +201,11 @@ data class SavedChatMessage(
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "SavedDailyPlan")
+data class SavedDailyPlan(
+    @PrimaryKey val dateKey: String, // "2026-08-31"
+    val planText: String,
+    val generatedAt: Long = System.currentTimeMillis(),
+    val aiTier: String = "unknown" // "gemma4_e2b", "cloud", "offline"
+)

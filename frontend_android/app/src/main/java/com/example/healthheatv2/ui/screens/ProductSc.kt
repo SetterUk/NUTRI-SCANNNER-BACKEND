@@ -13,8 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +35,7 @@ import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import com.example.healthheatv2.R
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.healthheatv2.network.AlternativeProduct
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.network.IngredientAnalysis
@@ -76,6 +76,8 @@ enum class CaptureState { NONE, PRODUCT_FRONT, PRODUCT_LABEL }
 fun ProductScreen(
     viewModel: ScannerViewModel,
     nutritionEngine: com.example.healthheatv2.services.NutritionEngine,
+    nanoCoach: com.example.healthheatv2.ai.NanoNutritionistCoach,
+    userProfile: com.example.healthheatv2.data.UserProfile,
     onScanAnother: () -> Unit,
     onViewDetails: () -> Unit,
 ) {
@@ -89,6 +91,10 @@ fun ProductScreen(
 
     val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
     val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    var aiVerdictText by remember { mutableStateOf<String?>(null) }
+    var aiVerdictLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     when (captureState) {
         CaptureState.PRODUCT_FRONT -> {
@@ -208,7 +214,7 @@ fun ProductScreen(
                     )
                 }
 
-                // ── AI Summary ────────────────────
+                // ── AI Summary (cloud) ────────────
                 val summary = product.summary
                 if (!summary.isNullOrEmpty()) {
                     item {
@@ -217,6 +223,28 @@ fun ProductScreen(
                         Spacer(Modifier.height(12.dp))
                         AISummaryCard(summary = summary)
                     }
+                }
+
+                // ── On-Device Personal Verdict (Gemma 4 E2B) ──────────────
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    AiPersonalVerdictCard(
+                        verdictText = aiVerdictText,
+                        isLoading = aiVerdictLoading,
+                        onAskAiClick = {
+                            scope.launch {
+                                aiVerdictLoading = true
+                                try {
+                                    aiVerdictText = nanoCoach.generateProductVerdict(product, userProfile, nutritionEngine)
+                                } catch (e: Exception) {
+                                    aiVerdictText = "Could not generate a personal verdict. Please try again."
+                                } finally {
+                                    aiVerdictLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
                 }
 
                 // ── Ingredient Forensics ──────────
@@ -1434,6 +1462,95 @@ private fun NonFoodCard(modifier: Modifier = Modifier) {
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 lineHeight = 18.sp
             )
+        }
+    }
+}
+
+@Composable
+fun AiPersonalVerdictCard(
+    verdictText: String?,
+    isLoading: Boolean,
+    onAskAiClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalAppColors.current
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = colors.card,
+        border = BorderStroke(1.dp, colors.accentGreen.copy(alpha = 0.3f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("⚡", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Personal AI Verdict",
+                            color = colors.textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "Based on your profile, goals & today's intake",
+                        color = colors.textHint,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = colors.accentGreen,
+                            modifier = Modifier.size(26.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+                verdictText != null -> {
+                    val cleanVerdict = verdictText
+                        .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
+                        .trim()
+                    Text(
+                        text = cleanVerdict,
+                        color = colors.textPrimary,
+                        fontSize = 14.sp,
+                        lineHeight = 21.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    TextButton(
+                        onClick = onAskAiClick,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Re-analyse", color = colors.accentGreen, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                else -> {
+                    androidx.compose.material3.Button(
+                        onClick = onAskAiClick,
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        shape = CircleShape,
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = colors.accentGreen
+                        )
+                    ) {
+                        Text("Ask AI — Is This Good For Me?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+            }
         }
     }
 }
