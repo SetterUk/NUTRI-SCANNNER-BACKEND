@@ -17,6 +17,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,6 +52,7 @@ fun NutritionistChatScreen(
 ) {
     var selectedTab by remember { mutableStateOf(0) } // 0 = Dashboard, 1 = Chat
     val colors = LocalAppColors.current
+    var refreshTrigger by remember { mutableIntStateOf(0) }
 
     Scaffold(
         containerColor = colors.background,
@@ -120,7 +123,9 @@ fun NutritionistChatScreen(
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
             ) {
-                ChatInputBar(nanoCoach, voiceCoach, userProfile, nutritionEngine)
+                ChatInputBar(nanoCoach, voiceCoach, userProfile, nutritionEngine) {
+                    refreshTrigger++
+                }
             }
         }
     ) { paddingValues ->
@@ -147,14 +152,15 @@ fun NutritionistChatScreen(
                                 DashboardSc(
                                     userProfile = userProfile,
                                     nutritionEngine = nutritionEngine,
-                                    onFixMyNutritionClick = onFixMyNutritionClick
+                                    onFixMyNutritionClick = onFixMyNutritionClick,
+                                    refreshTrigger = refreshTrigger
                                 )
                             }
                         }
                     }
                     1 -> {
                         // Chat Content
-                        ChatContent(coach = nanoCoach)
+                        ChatContent(coach = nanoCoach, nutritionEngine = nutritionEngine)
                     }
                 }
             }
@@ -190,13 +196,20 @@ private val sharedChatMessages = mutableStateListOf<ChatMessage>()
 private var hasInitializedChat = false
 
 @Composable
-private fun ChatContent(coach: NanoNutritionistCoach) {
+private fun ChatContent(coach: NanoNutritionistCoach, nutritionEngine: NutritionEngine) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) {
         if (!hasInitializedChat) {
             coach.initialize()
-            sharedChatMessages.add(ChatMessage("Hi! I'm your AI Nutritionist. Check your dashboard to see your daily streaks and missing nutrients, or ask me anything here!", false))
+            val history = nutritionEngine.getChatHistory()
+            if (history.isEmpty()) {
+                val welcomeMsg = "Hi! I'm your AI Nutritionist. Check your dashboard to see your daily streaks and missing nutrients, or ask me anything here!"
+                sharedChatMessages.add(ChatMessage(welcomeMsg, false))
+                nutritionEngine.saveChatMessage(welcomeMsg, false)
+            } else {
+                sharedChatMessages.addAll(history.map { ChatMessage(it.text, it.isUser) })
+            }
             hasInitializedChat = true
         }
     }
@@ -226,7 +239,13 @@ private fun ChatContent(coach: NanoNutritionistCoach) {
 
 @OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
 @Composable
-private fun ChatInputBar(nanoCoach: NanoNutritionistCoach, voiceCoach: com.example.healthheatv2.ai.VoiceNutritionistCoach, userProfile: UserProfile, nutritionEngine: NutritionEngine) {
+private fun ChatInputBar(
+    nanoCoach: NanoNutritionistCoach, 
+    voiceCoach: com.example.healthheatv2.ai.VoiceNutritionistCoach, 
+    userProfile: UserProfile, 
+    nutritionEngine: NutritionEngine,
+    onFoodLogged: () -> Unit
+) {
     var inputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
@@ -284,11 +303,13 @@ private fun ChatInputBar(nanoCoach: NanoNutritionistCoach, voiceCoach: com.examp
                             .clickable(enabled = !isLoading && inputText.isNotBlank()) {
                                 val userMsg = inputText
                                 sharedChatMessages.add(ChatMessage(userMsg, true))
+                                nutritionEngine.saveChatMessage(userMsg, true)
                                 inputText = ""
                                 isLoading = true
                                 scope.launch {
                                     try {
-                                        val response = nanoCoach.generateNutriBotResponse(sharedChatMessages.toList(), userProfile)
+                                        val consumedKcal = nutritionEngine.getTodayIntake().calories
+                                        val response = nanoCoach.generateNutriBotResponse(sharedChatMessages.toList(), userProfile, consumedKcal)
                                         val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
                                         val match = logFoodRegex.find(response)
                                         var finalResponse = response
@@ -298,13 +319,17 @@ private fun ChatInputBar(nanoCoach: NanoNutritionistCoach, voiceCoach: com.examp
                                             val success = nutritionEngine.searchAndLogFood(foodName)
                                             if (success) {
                                                 finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
+                                                onFoodLogged()
                                             } else {
                                                 finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
                                             }
                                         }
                                         sharedChatMessages.add(ChatMessage(finalResponse, false))
+                                        nutritionEngine.saveChatMessage(finalResponse, false)
                                     } catch (e: Exception) {
-                                        sharedChatMessages.add(ChatMessage("Error generating response.", false))
+                                        val errMsg = "Sorry, I encountered an error: ${e.message}"
+                                        sharedChatMessages.add(ChatMessage(errMsg, false))
+                                        nutritionEngine.saveChatMessage(errMsg, false)
                                     } finally {
                                         isLoading = false
                                     }
@@ -343,10 +368,12 @@ private fun ChatInputBar(nanoCoach: NanoNutritionistCoach, voiceCoach: com.examp
                                         isListening = false
                                         val userMsg = result
                                         sharedChatMessages.add(ChatMessage(userMsg, true))
+                                        nutritionEngine.saveChatMessage(userMsg, true)
                                         isLoading = true
                                         scope.launch {
                                             try {
-                                                val response = voiceCoach.chatWithVoice(sharedChatMessages.toList(), userProfile)
+                                                val consumedKcal = nutritionEngine.getTodayIntake().calories
+                                                val response = voiceCoach.chatWithVoice(sharedChatMessages.toList(), userProfile, consumedKcal)
                                                 val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
                                                 val match = logFoodRegex.find(response)
                                                 var finalResponse = response
@@ -356,13 +383,17 @@ private fun ChatInputBar(nanoCoach: NanoNutritionistCoach, voiceCoach: com.examp
                                                     val success = nutritionEngine.searchAndLogFood(foodName)
                                                     if (success) {
                                                         finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
+                                                        onFoodLogged()
                                                     } else {
                                                         finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
                                                     }
                                                 }
                                                 sharedChatMessages.add(ChatMessage(finalResponse, false))
+                                                nutritionEngine.saveChatMessage(finalResponse, false)
                                             } catch (e: Exception) {
-                                                sharedChatMessages.add(ChatMessage("Error generating response.", false))
+                                                val errMsg = "Error generating response."
+                                                sharedChatMessages.add(ChatMessage(errMsg, false))
+                                                nutritionEngine.saveChatMessage(errMsg, false)
                                             } finally {
                                                 isLoading = false
                                             }
@@ -428,13 +459,82 @@ fun ChatBubble(message: ChatMessage) {
                 border = if (!message.isUser) BorderStroke(1.dp, colors.border) else null,
                 modifier = Modifier.widthIn(max = 270.dp)
             ) {
-                Text(
-                    text = message.text,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    color = if (message.isUser) Color.White else colors.textPrimary,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp
-                )
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    val textParts = message.text.split("</think>")
+                    val hasThink = textParts.size > 1 && message.text.contains("<think>")
+                    val thinkText = if (hasThink) textParts[0].substringAfter("<think>").trim() else null
+                    val rawMainText = if (hasThink) textParts[1].trim() else message.text
+                    val mainText = rawMainText.replace(Regex("[*#_~`]"), "") // Strip all markdown symbols to ensure purely clean text
+                    
+                    if (thinkText != null && thinkText.isNotBlank()) {
+                        var showThinking by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showThinking = !showThinking }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (showThinking) androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp else androidx.compose.material.icons.Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Toggle Thinking",
+                                tint = colors.textSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "View AI Reasoning",
+                                color = colors.textSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        
+                        AnimatedVisibility(visible = showThinking) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = colors.background.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                            ) {
+                                Text(
+                                    text = thinkText,
+                                    modifier = Modifier.padding(8.dp),
+                                    color = colors.textSecondary,
+                                    fontSize = 12.sp,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+
+                    if (mainText.isNotBlank()) {
+                        var displayedText by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+                        var animationCompleted by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                        
+                        LaunchedEffect(mainText) {
+                            if (!message.isUser && !animationCompleted) {
+                                displayedText = ""
+                                // Typewriter effect
+                                for (i in mainText.indices) {
+                                    displayedText += mainText[i]
+                                    kotlinx.coroutines.delay(10) // Typewriter speed
+                                }
+                                animationCompleted = true
+                            } else {
+                                displayedText = mainText
+                            }
+                        }
+
+                        Text(
+                            text = displayedText,
+                            color = if (message.isUser) Color.White else colors.textPrimary,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp
+                        )
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(

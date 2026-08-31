@@ -1,10 +1,12 @@
-import httpx
-import asyncio
-
-async def test():
-    async with httpx.AsyncClient() as c:
-        r = await c.get('https://world.openfoodfacts.org/api/v2/product/5449000000996.json', headers={'User-Agent': 'HealthEatApp/1.0'})
-        print(r.status_code)
-        print(r.json().get('status', 'no_status'))
-
-asyncio.run(test())
+import urllib.request, json, urllib.error
+req = urllib.request.Request(
+    'https://nutri-scanner-api.onrender.com/api/chat', 
+    data=json.dumps({'messages':[{'role':'user','content':'Is a banana healthy?'}]}).encode('utf-8'), 
+    headers={'Content-Type':'application/json'}, 
+    method='POST'
+)
+try:
+    resp = urllib.request.urlopen(req)
+    print(resp.read().decode('utf-8'))
+except urllib.error.HTTPError as e:
+    print(e.read().decode('utf-8'))

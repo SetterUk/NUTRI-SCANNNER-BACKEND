@@ -145,9 +145,19 @@ class NutritionEngine(
 
     suspend fun searchAndLogFood(foodName: String): Boolean {
         val food = db.nutritionDao().searchFoodByName(foodName) ?: return false
+        
+        // Calculate meal slot based on current hour
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val mealSlot = when (hour) {
+            in 5..10 -> "breakfast"
+            in 11..15 -> "lunch"
+            in 16..18 -> "snack"
+            else -> "dinner"
+        }
+        
         val meal = LoggedMeal(
             date = System.currentTimeMillis(),
-            mealSlot = "snack",
+            mealSlot = mealSlot,
             foodId = food.id,
             foodName = food.food_name,
             quantity = 1f,
@@ -155,9 +165,14 @@ class NutritionEngine(
             calories = food.energy_kcal,
             protein = food.protein_g,
             carbs = food.carbs_g,
-            fat = 0f, // Not present in IFCTFood entity
-            fiber = 0f,
-            iron = 0f, calcium = 0f, zinc = 0f, b12 = 0f, vitaminD = 0f, folate = 0f
+            fat = food.fat_g,
+            fiber = food.fiber_g,
+            iron = food.iron_mg, 
+            calcium = food.calcium_mg, 
+            zinc = food.zinc_mg, 
+            b12 = food.b12_mcg, 
+            vitaminD = food.vitamin_d_iu, 
+            folate = food.folate_mcg
         )
         db.mealLogDao().insertMeal(meal)
         return true
@@ -257,5 +272,14 @@ class NutritionEngine(
         }
 
         return personalScore.coerceIn(0, 100)
+    }
+
+    suspend fun getChatHistory(): List<com.example.healthheatv2.data.SavedChatMessage> {
+        return db.nutritionDao().getChatHistory()
+    }
+
+    suspend fun saveChatMessage(text: String, isUser: Boolean) {
+        val msg = com.example.healthheatv2.data.SavedChatMessage(text = text, isUser = isUser)
+        db.nutritionDao().insertChatMessage(msg)
     }
 }

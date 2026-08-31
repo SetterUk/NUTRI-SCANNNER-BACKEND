@@ -126,6 +126,17 @@ class ProfileUpdate(BaseModel):
     health_goals: Optional[str] = None
     allergies: Optional[List[str]] = None
     health_tags: Optional[List[str]] = None
+    
+    # Calculated Targets
+    bmi: Optional[float] = None
+    bmr: Optional[float] = None
+    tdee: Optional[float] = None
+    daily_calories: Optional[float] = None
+    daily_protein: Optional[float] = None
+    daily_carbs: Optional[float] = None
+    daily_fat: Optional[float] = None
+    daily_fiber: Optional[float] = None
+    daily_water: Optional[float] = None
 
 class UserProfileResponse(BaseModel):
     age: Optional[int] = None
@@ -137,6 +148,17 @@ class UserProfileResponse(BaseModel):
     health_goals: Optional[str] = None
     allergies: List[str] = []
     health_tags: List[str] = []
+    
+    # Calculated Targets
+    bmi: Optional[float] = None
+    bmr: Optional[float] = None
+    tdee: Optional[float] = None
+    daily_calories: Optional[float] = None
+    daily_protein: Optional[float] = None
+    daily_carbs: Optional[float] = None
+    daily_fat: Optional[float] = None
+    daily_fiber: Optional[float] = None
+    daily_water: Optional[float] = None
 
 class UserResponse(BaseModel):
     id: int

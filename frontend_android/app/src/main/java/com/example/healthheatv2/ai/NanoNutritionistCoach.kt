@@ -52,10 +52,9 @@ class NanoNutritionistCoach(
         }
     }
 
-    suspend fun generateNutriBotResponse(chatHistory: List<com.example.healthheatv2.ui.screens.ChatMessage>, userProfile: UserProfile): String = withContext(Dispatchers.IO) {
+    suspend fun generateNutriBotResponse(chatHistory: List<com.example.healthheatv2.ui.screens.ChatMessage>, userProfile: UserProfile, consumedKcal: Float): String = withContext(Dispatchers.IO) {
         // 1. Calculate Deficit
-        val consumedKcal = userProfile.dailyCalories ?: 0f
-        val targetKcal = userProfile.bmr ?: 2000f
+        val targetKcal = userProfile.dailyCalories ?: 2000f
         val calorieDeficit = maxOf(0f, targetKcal - consumedKcal)
         val minProtein = (userProfile.dailyProtein ?: 50f) / 3f // Target 1/3 of daily protein per meal
         
@@ -72,16 +71,21 @@ class NanoNutritionistCoach(
         // 4. Construct JSON Prompt
         val foodListJson = eligibleFoods.joinToString(", ") { "{name: '${it.food_name}', kcal: ${it.energy_kcal}, protein: ${it.protein_g}}" }
         
-        // Format the last 3 messages for context memory
-        val memoryContext = chatHistory.takeLast(3).joinToString("\n") { 
+        // Format the last 10 messages for context memory
+        val memoryContext = chatHistory.takeLast(10).joinToString("\n") { 
             if (it.isUser) "USER: ${it.text}" else "NUTRIBOT: ${it.text}" 
         }
         
         val systemPrompt = """
             SYSTEM INSTRUCTION: You are an expert dietitian. Answer the user strictly using this data:
             {
-              "user_state": {
-                "calorie_deficit": $calorieDeficit,
+              "user_profile": {
+                "tdee": ${userProfile.tdee ?: "unknown"},
+                "daily_calorie_target": $targetKcal,
+                "calories_consumed_today": $consumedKcal,
+                "remaining_calories": $calorieDeficit,
+                "diet_type": "${userProfile.dietType}",
+                "allergies": "${userProfile.allergies.joinToString(", ").ifBlank { "none" }}",
                 "active_condition": "$medicalCondition"
               },
               "icmr_rules": {
@@ -91,6 +95,13 @@ class NanoNutritionistCoach(
               "eligible_foods": [$foodListJson]
             }
             
+            CRITICAL RULES:
+            1. NEVER recommend foods that violate the user's diet_type.
+            2. NEVER recommend foods that contain the user's allergies.
+            3. Use the remaining_calories to give specific portion advice.
+            4. ABSOLUTELY NO MARKDOWN. Do NOT use asterisks, bold, italics, hash symbols, or tables. Format your response ONLY in plain text.
+            5. Use simple hyphens (-) for bullet points. Keep the response very conversational, warm, and brief.
+
             IMPORTANT LOGGING RULE: 
             If the user explicitly states they ate a food (e.g. "I just ate dal", "I had chicken for lunch"), you MUST include this exact tag at the very end of your response: [LOG_FOOD: Food_Name]. 
             Example User: "I had 1 bowl of spinach dal"

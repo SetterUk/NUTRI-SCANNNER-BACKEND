@@ -26,9 +26,10 @@ import kotlinx.coroutines.launch
         FoodSubstitution::class,
         FoodAllergen::class,
         MealTemplate::class,
-        MealItem::class
+        MealItem::class,
+        SavedChatMessage::class
     ],
-    version = 6,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -105,6 +106,17 @@ abstract class UserDatabase : RoomDatabase() {
                         val energy = macros.getDouble("calories").toFloat()
                         val protein = macros.getDouble("protein").toFloat()
                         val carbs = macros.getDouble("carbs").toFloat()
+                        val fat = macros.optDouble("fat", 0.0).toFloat()
+                        val fiber = macros.optDouble("fiber", 0.0).toFloat()
+                        
+                        val micros = food.optJSONObject("micros") ?: org.json.JSONObject()
+                        val iron = micros.optDouble("iron_mg", 0.0).toFloat()
+                        val calcium = micros.optDouble("calcium_mg", 0.0).toFloat()
+                        val zinc = micros.optDouble("zinc_mg", 0.0).toFloat()
+                        val b12 = micros.optDouble("b12_mcg", 0.0).toFloat()
+                        val vitaminD = micros.optDouble("vitamin_d_iu", 0.0).toFloat()
+                        val folate = micros.optDouble("folate_mcg", 0.0).toFloat()
+                        
                         val category = food.getString("category")
                         val isVeg = if (food.getBoolean("veg")) "vegetarian" else "non-vegetarian"
                         
@@ -117,7 +129,7 @@ abstract class UserDatabase : RoomDatabase() {
                         }
                         val tags = listOf(category, isVeg) + aliases
                         
-                        ifctFoods.add(IFCTFood(id, name, serving, energy, protein, carbs, tags.joinToString(",")))
+                        ifctFoods.add(IFCTFood(id, name, serving, energy, protein, carbs, fat, fiber, iron, calcium, zinc, b12, vitaminD, folate, tags.joinToString(",")))
                     }
                     dao.insertIFCTFoods(ifctFoods)
                 } catch (e: Exception) {

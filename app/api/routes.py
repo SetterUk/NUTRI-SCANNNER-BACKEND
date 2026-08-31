@@ -514,7 +514,7 @@ async def chat_with_nutritionist(
     client = groq_manager.get_best_client()
     try:
         response = await client.chat.completions.create(
-            model="openai/gpt-oss-20b",
+            model="deepseek-r1-distill-llama-70b",
             messages=[{"role": m.role, "content": m.content} for m in data.messages]
         )
         return {"response": response.choices[0].message.content}

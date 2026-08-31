@@ -183,5 +183,21 @@ data class IFCTFood(
     val energy_kcal: Float,
     val protein_g: Float,
     val carbs_g: Float,
+    val fat_g: Float,
+    val fiber_g: Float,
+    val iron_mg: Float,
+    val calcium_mg: Float,
+    val zinc_mg: Float,
+    val b12_mcg: Float,
+    val vitamin_d_iu: Float,
+    val folate_mcg: Float,
     val tags: String
+)
+@Entity(tableName = "SavedChatMessage")
+data class SavedChatMessage(
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
+    val text: String,
+    val isUser: Boolean,
+    val timestamp: Long = System.currentTimeMillis()
 )

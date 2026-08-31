@@ -1,20 +1,29 @@
 package com.example.healthheatv2.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.healthheatv2.services.MealCandidate
 import com.example.healthheatv2.services.NutritionGap
 import com.example.healthheatv2.services.RecommendationEngine
+import com.example.healthheatv2.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
 @Composable
@@ -23,6 +32,7 @@ fun FixMyNutritionSc(
     recommendationEngine: RecommendationEngine,
     onBackClick: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     var candidates by remember { mutableStateOf<List<MealCandidate>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
@@ -30,11 +40,10 @@ fun FixMyNutritionSc(
     LaunchedEffect(gap) {
         scope.launch {
             isLoading = true
-            // Generate recommendations filtering for budget and user allergies
+            // Generate recommendations filtering for user allergies & remaining calories
             candidates = recommendationEngine.generateRecommendations(
                 biggestGap = gap,
-                remainingCalories = 500f, // Example target, typically from GapAnalysis
-                budgetPref = 100f // "Under ₹100" demo constraint
+                remainingCalories = 500f // Assume user has 500 cals left for this meal
             )
             isLoading = false
         }
@@ -43,54 +52,99 @@ fun FixMyNutritionSc(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFAFAFA))
+            .background(colors.background)
     ) {
-        // Top Bar
+        // Shadcn-style Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(top = 24.dp, bottom = 12.dp, start = 8.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = onBackClick, colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Black)) {
-                Text("← Back")
+            IconButton(onClick = onBackClick) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
             }
-            Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Fix My Nutrition",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                text = "Target: ${gap.nutrient.replaceFirstChar { it.uppercase() }}",
+                color = colors.textPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
             )
         }
-
-        PaddingValues(16.dp)
         
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Addressing Gap: ${gap.nutrient}",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.Gray
-            )
-            Text(
-                text = "You need ${gap.gap.toInt()}${gap.unit}.",
-                style = MaterialTheme.typography.bodyLarge
-            )
+        Divider(color = colors.border, thickness = 1.dp)
+
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Gap Summary Card
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.accentRed.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Warning, contentDescription = null, tint = colors.accentRed)
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = "Current Deficit",
+                                color = colors.textHint,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${gap.gap.toInt()}${gap.unit} ${gap.nutrient}",
+                                color = colors.textPrimary,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
             
-            Spacer(modifier = Modifier.height(24.dp))
-            
+            item {
+                Text(
+                    text = "Recommended Options",
+                    color = colors.textPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFFFF9800))
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = colors.accentGreen)
+                    }
                 }
             } else if (candidates.isEmpty()) {
-                Text("No safe, budget-friendly options found that fit your remaining calories.")
+                item {
+                    Text(
+                        text = "No safe options found that fit your diet restrictions and remaining calories.",
+                        color = colors.textSecondary,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
             } else {
-                Text("Personalized Recommendations", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                LazyColumn {
-                    items(candidates) { candidate ->
-                        MealCandidateCard(candidate)
-                    }
+                items(candidates) { candidate ->
+                    MealCandidateCard(candidate)
                 }
             }
         }
@@ -99,39 +153,77 @@ fun FixMyNutritionSc(
 
 @Composable
 fun MealCandidateCard(candidate: MealCandidate) {
+    val colors = LocalAppColors.current
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White,
-        shadowElevation = 2.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
+        shape = RoundedCornerShape(16.dp),
+        color = colors.card,
+        border = BorderStroke(1.dp, colors.border),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = candidate.name,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Suggested: ${candidate.amountToConsume}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray
-                )
-                Text(
-                    text = "+${candidate.gapReduced.toInt()}g",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color(0xFF4CAF50)
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = candidate.name.replaceFirstChar { it.uppercase() },
+                        color = colors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Suggested Serving: ${candidate.amountToConsume}",
+                        color = colors.textSecondary,
+                        fontSize = 14.sp
+                    )
+                }
+                
+                // Gain Badge
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = colors.accentGreenSubtle,
+                    border = BorderStroke(1.dp, colors.accentGreen.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "+${candidate.gapReduced.toInt()}g",
+                        color = colors.accentGreen,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        fontSize = 14.sp
+                    )
+                }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
-            // "Why?" Tags
+            // Info Tags
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(onClick = {}, label = { Text("Fits Calorie Budget") })
-                AssistChip(onClick = {}, label = { Text("Safe (No Allergens)") })
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.surface)
+                        .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.LocalFireDepartment, contentDescription = null, tint = colors.accentAmber, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Fits Diet", color = colors.textSecondary, fontSize = 12.sp)
+                    }
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.surface)
+                        .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("Allergen Free", color = colors.textSecondary, fontSize = 12.sp)
+                }
             }
         }
     }

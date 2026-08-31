@@ -37,6 +37,17 @@ class UserProfile(SQLModel, table=True):
     # Health tags (Diabetic, Vegan, etc.)
     health_tags: List[str] = Field(default=[], sa_type=JSON)
     
+    # Calculated Targets
+    bmi: Optional[float] = None
+    bmr: Optional[float] = None
+    tdee: Optional[float] = None
+    daily_calories: Optional[float] = None
+    daily_protein: Optional[float] = None
+    daily_carbs: Optional[float] = None
+    daily_fat: Optional[float] = None
+    daily_fiber: Optional[float] = None
+    daily_water: Optional[float] = None
+    
     updated_at: datetime = Field(
         default_factory=datetime.utcnow,
         sa_column_kwargs={"onupdate": datetime.utcnow}

@@ -55,6 +55,60 @@ import com.example.healthheatv2.ui.viewmodel.AuthViewModel
 import com.example.healthheatv2.ui.viewmodel.ScannerViewModel
 import com.example.healthheatv2.ui.viewmodel.ThemeViewModel
 
+import com.example.healthheatv2.network.UserProfileResponse
+import com.example.healthheatv2.services.calculateBMI
+import com.example.healthheatv2.services.calculateBMR
+import com.example.healthheatv2.services.calculateTDEE
+import com.example.healthheatv2.services.calculateTargets
+
+fun mapNetworkProfileToLocal(profile: UserProfileResponse): com.example.healthheatv2.data.UserProfile {
+    val age = profile.age ?: 25
+    val sex = profile.gender ?: "Other"
+    val heightCm = profile.height?.toFloat() ?: 170f
+    val weightKg = profile.weightKg?.toFloat() ?: 70f
+    val activityLevel = profile.activityLevel ?: "sedentary"
+    val primaryGoal = profile.healthGoals ?: "general_health"
+    val dietType = profile.dietaryPreferences ?: "omnivore"
+    
+    val isMale = sex.equals("Male", ignoreCase = true) || sex.equals("Prefer not to say", ignoreCase = true)
+    
+    val bmi = calculateBMI(heightCm, weightKg)
+    val bmr = calculateBMR(age, isMale, heightCm, weightKg)
+    val tdee = calculateTDEE(bmr, activityLevel)
+    val targets = calculateTargets(tdee, primaryGoal, dietType, weightKg)
+    
+    return com.example.healthheatv2.data.UserProfile(
+        age = age,
+        sex = sex,
+        heightCm = heightCm,
+        weightKg = weightKg,
+        activityLevel = activityLevel,
+        primaryGoal = primaryGoal,
+        secondaryGoals = emptyList(),
+        dietType = dietType,
+        allergies = profile.allergies ?: emptyList(),
+        dietaryRestrictions = emptyList(),
+        dislikedFoods = emptyList(),
+        preferredCuisines = emptyList(),
+        healthTags = profile.healthTags ?: emptyList(),
+        bmi = bmi,
+        bmr = bmr,
+        tdee = tdee,
+        dailyCalories = targets.dailyCalories,
+        dailyProtein = targets.dailyProtein,
+        dailyCarbs = targets.dailyCarbs,
+        dailyFat = targets.dailyFat,
+        dailyFiber = targets.dailyFiber,
+        dailyWater = targets.dailyWater,
+        dailyIron = 18f,
+        dailyCalcium = 1000f,
+        dailyZinc = 11f,
+        dailyB12 = 2.4f,
+        dailyVitaminD = 600f,
+        dailyFolate = 400f
+    )
+}
+
 sealed class Screen(val route: String) {
     object Auth : Screen("auth")
     object SearchHub : Screen("search_hub")
@@ -177,21 +231,7 @@ fun App(modifier: Modifier = Modifier) {
                     val profile = userProfile
                     var nutritionEngine: com.example.healthheatv2.services.NutritionEngine? = null
                     if (profile != null) {
-                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
-                            age = profile.age ?: 25,
-                            sex = profile.gender ?: "Other",
-                            heightCm = profile.height?.toFloat() ?: 170f,
-                            weightKg = profile.weightKg?.toFloat() ?: 70f,
-                            activityLevel = profile.activityLevel ?: "sedentary",
-                            primaryGoal = profile.healthGoals ?: "general_health",
-                            secondaryGoals = emptyList(),
-                            dietType = profile.dietaryPreferences ?: "omnivore",
-                            allergies = profile.allergies ?: emptyList(),
-                            dietaryRestrictions = emptyList(),
-                            dislikedFoods = emptyList(),
-                            preferredCuisines = emptyList(),
-                            healthTags = profile.healthTags ?: emptyList()
-                        )
+                        val mappedProfile = mapNetworkProfileToLocal(profile)
                         nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
                     }
 
@@ -222,21 +262,7 @@ fun App(modifier: Modifier = Modifier) {
                 composable(Screen.NutritionistChat.route) {
                     val profile = userProfile
                     if (profile != null) {
-                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
-                            age = profile.age ?: 25,
-                            sex = profile.gender ?: "Other",
-                            heightCm = profile.height?.toFloat() ?: 170f,
-                            weightKg = profile.weightKg?.toFloat() ?: 70f,
-                            activityLevel = profile.activityLevel ?: "sedentary",
-                            primaryGoal = profile.healthGoals ?: "general_health",
-                            secondaryGoals = emptyList(),
-                            dietType = profile.dietaryPreferences?.firstOrNull()?.toString() ?: "omnivore",
-                            allergies = profile.allergies ?: emptyList(),
-                            dietaryRestrictions = emptyList(),
-                            dislikedFoods = emptyList(),
-                            preferredCuisines = emptyList(),
-                            healthTags = profile.healthTags ?: emptyList()
-                        )
+                        val mappedProfile = mapNetworkProfileToLocal(profile)
                         val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
                         val nanoCoach = remember(mappedProfile) { 
                             com.example.healthheatv2.ai.NanoNutritionistCoach(context, userDatabase.nutritionDao()) 
@@ -289,21 +315,7 @@ fun App(modifier: Modifier = Modifier) {
                 composable(Screen.Product.route) {
                     val profile = userProfile
                     if (profile != null) {
-                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
-                            age = profile.age ?: 25,
-                            sex = profile.gender ?: "Other",
-                            heightCm = profile.height?.toFloat() ?: 170f,
-                            weightKg = profile.weightKg?.toFloat() ?: 70f,
-                            activityLevel = profile.activityLevel ?: "sedentary",
-                            primaryGoal = profile.healthGoals ?: "general_health",
-                            secondaryGoals = emptyList(),
-                            dietType = profile.dietaryPreferences ?: "omnivore",
-                            allergies = profile.allergies ?: emptyList(),
-                            dietaryRestrictions = emptyList(),
-                            dislikedFoods = emptyList(),
-                            preferredCuisines = emptyList(),
-                            healthTags = profile.healthTags ?: emptyList()
-                        )
+                        val mappedProfile = mapNetworkProfileToLocal(profile)
                         val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
                         ProductScreen(
                             viewModel = scannerViewModel,
@@ -328,22 +340,8 @@ fun App(modifier: Modifier = Modifier) {
                     val gap = scannerViewModel.selectedGap
                     val profile = userProfile
                     if (gap != null && profile != null) {
-                        val mappedProfile = com.example.healthheatv2.data.UserProfile(
-                            age = profile.age ?: 25,
-                            sex = profile.gender ?: "Other",
-                            heightCm = profile.height?.toFloat() ?: 170f,
-                            weightKg = profile.weightKg?.toFloat() ?: 70f,
-                            activityLevel = profile.activityLevel ?: "sedentary",
-                            primaryGoal = profile.healthGoals ?: "general_health",
-                            secondaryGoals = emptyList(),
-                            dietType = profile.dietaryPreferences ?: "omnivore",
-                            allergies = profile.allergies ?: emptyList(),
-                            dietaryRestrictions = emptyList(),
-                            dislikedFoods = emptyList(),
-                            preferredCuisines = emptyList(),
-                            healthTags = profile.healthTags ?: emptyList()
-                        )
-                        val recEngine = com.example.healthheatv2.services.RecommendationEngine(foodDatabase, mappedProfile)
+                        val mappedProfile = mapNetworkProfileToLocal(profile)
+                        val recEngine = com.example.healthheatv2.services.RecommendationEngine(userDatabase.nutritionDao(), mappedProfile)
                         FixMyNutritionSc(
                             gap = gap,
                             recommendationEngine = recEngine,

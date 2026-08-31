@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.example.healthheatv2.ui.theme.AppColors
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
+import com.example.healthheatv2.mapNetworkProfileToLocal
 import kotlinx.coroutines.launch
 import com.example.healthheatv2.network.RetrofitClient
 
@@ -495,6 +496,41 @@ fun ProfileScreen(
                         )
                         if (selectedDiet != "None" && selectedDiet.isNotBlank()) {
                             Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accentGreen)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text("Calculated Targets", color = colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Based on your metrics, here are your personalized daily targets.",
+                        color = colors.textSecondary,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val mappedProfile = userProfile?.let { mapNetworkProfileToLocal(it) }
+                    
+                    val bmiStr = mappedProfile?.bmi?.let { String.format(java.util.Locale.US, "%.1f", it) } ?: "Not calculated"
+                    val bmrStr = mappedProfile?.bmr?.let { "${it.toInt()} kcal/day" } ?: "Not calculated"
+                    val tdeeStr = mappedProfile?.tdee?.let { "${it.toInt()} kcal/day" } ?: "Not calculated"
+                    val calStr = mappedProfile?.dailyCalories?.let { "${it.toInt()} kcal/day" } ?: "Not calculated"
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            ProfileInfoCard(label = "Current BMI", value = bmiStr, colors = colors)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            ProfileInfoCard(label = "Basal Metabolic Rate (BMR)", value = bmrStr, colors = colors)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            ProfileInfoCard(label = "Daily Energy (TDEE)", value = tdeeStr, colors = colors)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            ProfileInfoCard(label = "Target Calories", value = calStr, colors = colors)
                         }
                     }
                 }

@@ -42,14 +42,15 @@ import java.util.Locale
 fun DashboardSc(
     userProfile: UserProfile,
     nutritionEngine: NutritionEngine,
-    onFixMyNutritionClick: (NutritionGap) -> Unit
+    onFixMyNutritionClick: (NutritionGap) -> Unit,
+    refreshTrigger: Int = 0
 ) {
     var gaps by remember { mutableStateOf<GapAnalysis?>(null) }
     var intake by remember { mutableStateOf<NutritionIntake?>(null) }
     var historicalMeals by remember { mutableStateOf<List<LoggedMeal>>(emptyList()) }
     val colors = LocalAppColors.current
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTrigger) {
         gaps = nutritionEngine.calculateGaps()
         intake = nutritionEngine.getTodayIntake()
         historicalMeals = nutritionEngine.getHistoricalMeals()

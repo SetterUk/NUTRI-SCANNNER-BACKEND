@@ -44,4 +44,19 @@ interface NutritionDao {
 
     @Query("SELECT * FROM IFCTFood WHERE energy_kcal <= :deficit AND protein_g >= :minProtein AND tags LIKE '%' || :requiredTag || '%' AND (:bannedTag IS '' OR tags NOT LIKE '%' || :bannedTag || '%') LIMIT 3")
     suspend fun getEligibleFoods(deficit: Float, minProtein: Float, requiredTag: String, bannedTag: String): List<IFCTFood>
+
+    @Query("SELECT * FROM IFCTFood")
+    suspend fun getAllIFCTFoods(): List<IFCTFood>
+
+    @Query("SELECT * FROM IFCTFood ORDER BY RANDOM() LIMIT 500")
+    suspend fun getSampleIFCTFoods(): List<IFCTFood>
+
+    @Query("SELECT * FROM SavedChatMessage ORDER BY timestamp ASC")
+    suspend fun getChatHistory(): List<SavedChatMessage>
+
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    suspend fun insertChatMessage(message: SavedChatMessage)
+
+    @Query("DELETE FROM SavedChatMessage")
+    suspend fun clearChatHistory()
 }
