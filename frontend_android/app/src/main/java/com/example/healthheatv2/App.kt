@@ -61,14 +61,14 @@ import com.example.healthheatv2.services.calculateBMR
 import com.example.healthheatv2.services.calculateTDEE
 import com.example.healthheatv2.services.calculateTargets
 
-fun mapNetworkProfileToLocal(profile: UserProfileResponse): com.example.healthheatv2.data.UserProfile {
-    val age = profile.age ?: 25
-    val sex = profile.gender ?: "Other"
-    val heightCm = profile.height?.toFloat() ?: 170f
-    val weightKg = profile.weightKg?.toFloat() ?: 70f
-    val activityLevel = profile.activityLevel ?: "sedentary"
-    val primaryGoal = profile.healthGoals ?: "general_health"
-    val dietType = profile.dietaryPreferences ?: "omnivore"
+fun mapNetworkProfileToLocal(profile: UserProfileResponse?): com.example.healthheatv2.data.UserProfile {
+    val age = profile?.age ?: 25
+    val sex = profile?.gender ?: "Other"
+    val heightCm = profile?.height?.toFloat() ?: 170f
+    val weightKg = profile?.weightKg?.toFloat() ?: 70f
+    val activityLevel = profile?.activityLevel ?: "sedentary"
+    val primaryGoal = profile?.healthGoals ?: "general_health"
+    val dietType = profile?.dietaryPreferences ?: "omnivore"
     
     val isMale = sex.equals("Male", ignoreCase = true) || sex.equals("Prefer not to say", ignoreCase = true)
     
@@ -86,11 +86,12 @@ fun mapNetworkProfileToLocal(profile: UserProfileResponse): com.example.healthhe
         primaryGoal = primaryGoal,
         secondaryGoals = emptyList(),
         dietType = dietType,
-        allergies = profile.allergies ?: emptyList(),
+        allergies = profile?.allergies ?: emptyList(),
         dietaryRestrictions = emptyList(),
         dislikedFoods = emptyList(),
         preferredCuisines = emptyList(),
-        healthTags = profile.healthTags ?: emptyList(),
+        healthTags = profile?.healthTags ?: emptyList(),
+        medicalReports = profile?.medicalReports ?: "",
         bmi = bmi,
         bmr = bmr,
         tdee = tdee,
@@ -228,11 +229,9 @@ fun App(modifier: Modifier = Modifier) {
                 }
 
                 composable(Screen.SearchHub.route) {
-                    val profile = userProfile
-                    var nutritionEngine: com.example.healthheatv2.services.NutritionEngine? = null
-                    if (profile != null) {
-                        val mappedProfile = mapNetworkProfileToLocal(profile)
-                        nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                    val mappedProfile = mapNetworkProfileToLocal(userProfile)
+                    val nutritionEngine = remember(mappedProfile) {
+                        com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
                     }
 
                     SearchHubScreen(
@@ -260,33 +259,28 @@ fun App(modifier: Modifier = Modifier) {
                 }
 
                 composable(Screen.NutritionistChat.route) {
-                    val profile = userProfile
-                    if (profile != null) {
-                        val mappedProfile = mapNetworkProfileToLocal(profile)
-                        val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
-                        val nanoCoach = remember(mappedProfile) { 
-                            com.example.healthheatv2.ai.NanoNutritionistCoach(context, userDatabase.nutritionDao()) 
-                        }
-                        val voiceCoach = remember(mappedProfile) {
-                            com.example.healthheatv2.ai.VoiceNutritionistCoach(context, nanoCoach)
-                        }
-                        
-                        com.example.healthheatv2.ui.screens.NutritionistChatScreen(
-                            voiceCoach = voiceCoach,
-                            nanoCoach = nanoCoach,
-                            userProfile = mappedProfile,
-                            nutritionEngine = nutritionEngine,
-                            onFixMyNutritionClick = { gap ->
-                                scannerViewModel.selectedGap = gap
-                                navController.navigate(Screen.FixMyNutrition.route)
-                            },
-                            onBackClick = { navController.popBackStack() }
-                        )
-                    } else {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
+                    val mappedProfile = mapNetworkProfileToLocal(userProfile)
+                    val nutritionEngine = remember(mappedProfile) {
+                        com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
                     }
+                    val nanoCoach = remember(mappedProfile) { 
+                        com.example.healthheatv2.ai.NanoNutritionistCoach(context, userDatabase.nutritionDao()) 
+                    }
+                    val voiceCoach = remember(mappedProfile) {
+                        com.example.healthheatv2.ai.VoiceNutritionistCoach(context, nanoCoach)
+                    }
+                    
+                    com.example.healthheatv2.ui.screens.NutritionistChatScreen(
+                        voiceCoach = voiceCoach,
+                        nanoCoach = nanoCoach,
+                        userProfile = mappedProfile,
+                        nutritionEngine = nutritionEngine,
+                        onFixMyNutritionClick = { gap ->
+                            scannerViewModel.selectedGap = gap
+                            navController.navigate(Screen.FixMyNutrition.route)
+                        },
+                        onBackClick = { navController.popBackStack() }
+                    )
                 }
 
                 composable(Screen.ManualSearch.route) {
@@ -313,35 +307,30 @@ fun App(modifier: Modifier = Modifier) {
                 }
 
                 composable(Screen.Product.route) {
-                    val profile = userProfile
-                    if (profile != null) {
-                        val mappedProfile = mapNetworkProfileToLocal(profile)
-                        val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
-                        ProductScreen(
-                            viewModel = scannerViewModel,
-                            nutritionEngine = nutritionEngine,
-                            onScanAnother = {
-                                scannerViewModel.resetState()
-                                navController.popBackStack(Screen.SearchHub.route, inclusive = false)
-                            },
-                            onViewDetails = {
-                                navController.navigate(Screen.DetailedNutrition.route)
-                            }
-                        )
-                    } else {
-                        // Fallback or loading state
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            androidx.compose.material3.CircularProgressIndicator()
-                        }
+                    val mappedProfile = mapNetworkProfileToLocal(userProfile)
+                    val nutritionEngine = remember(mappedProfile) {
+                        com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
                     }
+                    ProductScreen(
+                        viewModel = scannerViewModel,
+                        nutritionEngine = nutritionEngine,
+                        onScanAnother = {
+                            scannerViewModel.resetState()
+                            navController.popBackStack(Screen.SearchHub.route, inclusive = false)
+                        },
+                        onViewDetails = {
+                            navController.navigate(Screen.DetailedNutrition.route)
+                        }
+                    )
                 }
 
                 composable(Screen.FixMyNutrition.route) {
                     val gap = scannerViewModel.selectedGap
-                    val profile = userProfile
-                    if (gap != null && profile != null) {
-                        val mappedProfile = mapNetworkProfileToLocal(profile)
-                        val recEngine = com.example.healthheatv2.services.RecommendationEngine(userDatabase.nutritionDao(), mappedProfile)
+                    if (gap != null) {
+                        val mappedProfile = mapNetworkProfileToLocal(userProfile)
+                        val recEngine = remember(mappedProfile) {
+                            com.example.healthheatv2.services.RecommendationEngine(userDatabase.nutritionDao(), mappedProfile)
+                        }
                         FixMyNutritionSc(
                             gap = gap,
                             recommendationEngine = recEngine,
