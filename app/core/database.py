@@ -48,6 +48,16 @@ async def init_db():
             await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS height FLOAT;"))
             await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS weight_kg FLOAT;"))
             
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS bmi FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS bmr FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS tdee FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_calories FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_protein FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_carbs FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_fat FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_fiber FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_water FLOAT;"))
+            
             # 2. Relax constraints for columns that became Optional
             await conn.execute(text("ALTER TABLE product ALTER COLUMN verdict DROP NOT NULL;"))
             await conn.execute(text("ALTER TABLE product ALTER COLUMN is_good_for_health DROP NOT NULL;"))
