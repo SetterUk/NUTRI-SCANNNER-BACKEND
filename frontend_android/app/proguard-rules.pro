@@ -12,7 +12,7 @@
 #   public *;
 #}
 
-# Preserve line numbers so Crashlytics/Sentry stack traces are readable.
+# Preserve line numbers so Crashlytics stack traces are readable.
 -keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to

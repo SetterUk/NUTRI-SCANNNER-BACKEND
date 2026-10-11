@@ -152,19 +152,7 @@ fun DashboardSc(
         com.example.healthheatv2.ui.components.TodayMealsCard(
             meals = todayMeals,
             onDelete = { meal -> scope.launch { nutritionEngine.deleteMeal(meal.id) } },
-            onAdd = { text ->
-                val outcomes = nutritionEngine.logFoodsFromText(text)
-                val logged = outcomes.filter { it !is NutritionEngine.LogOutcome.NotFound }
-                val missing = outcomes.filterIsInstance<NutritionEngine.LogOutcome.NotFound>()
-                buildString {
-                    if (logged.isNotEmpty()) append("Logged ${logged.joinToString(", ") { it.label }}.")
-                    if (missing.isNotEmpty()) {
-                        if (isNotEmpty()) append(" ")
-                        append("Couldn't find ${missing.joinToString(", ") { it.label }}. Try asking NutriBot, it can estimate unlisted foods.")
-                    }
-                    if (isEmpty()) append("Nothing recognised. Try something like \"2 roti, 1 bowl dal\".")
-                }
-            }
+            onAdd = { text -> describeLogResult(nutritionEngine.logFoodsFromText(text)) }
         )
 
         Spacer(modifier = Modifier.height(24.dp))

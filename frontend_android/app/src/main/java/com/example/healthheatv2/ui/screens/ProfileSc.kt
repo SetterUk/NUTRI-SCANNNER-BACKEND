@@ -595,7 +595,12 @@ fun ProfileScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(40.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text("Reminders", color = colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    com.example.healthheatv2.ui.components.ReminderSettingRow()
+
+                    Spacer(modifier = Modifier.height(32.dp))
                     DeleteAccountSection(authViewModel = authViewModel, onAccountDeleted = onAccountDeleted)
                 }
 

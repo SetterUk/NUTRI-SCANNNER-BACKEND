@@ -83,7 +83,7 @@ android {
 
 dependencies {
     // Room Database
-    val roomVersion = "2.7.0-alpha13"
+    val roomVersion = "2.7.2"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion") // For Coroutines support
     kapt("androidx.room:room-compiler:$roomVersion")
@@ -141,5 +141,6 @@ dependencies {
     implementation("com.google.firebase:firebase-config")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("io.sentry:sentry-android:7.14.0")
+    // Background work (evening logging reminder)
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
 }

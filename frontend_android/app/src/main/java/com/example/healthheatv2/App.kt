@@ -266,6 +266,8 @@ fun App(modifier: Modifier = Modifier) {
                         viewModel = scannerViewModel,
                         authViewModel = authViewModel,
                         themeViewModel = themeViewModel,
+                        nutritionEngine = nutritionEngine,
+                        localProfile = mappedProfile,
                         onScanClick = {
                             scannerViewModel.resetState()
                             navController.navigate(Screen.Scanner.route)
@@ -282,7 +284,10 @@ fun App(modifier: Modifier = Modifier) {
                                 popUpTo(0) { inclusive = true }
                             }
                         },
-                        onAskAIClick = { navController.navigate(Screen.NutritionistChat.route) }
+                        onFixGap = { gap ->
+                            scannerViewModel.selectedGap = gap
+                            navController.navigate(Screen.FixMyNutrition.route)
+                        }
                     )
                 }
 

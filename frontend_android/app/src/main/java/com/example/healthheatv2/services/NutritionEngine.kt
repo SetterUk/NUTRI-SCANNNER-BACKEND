@@ -75,11 +75,14 @@ fun calculateTargets(
         else -> tdee // maintenance
     }
     
-    // Protein targets (high for muscle gain, moderate for maintenance)
+    // Protein per kg body weight. ICMR-NIN 2020 sets the adult RDA at 0.83 g/kg; 1.6 g/kg for
+    // "general health" meant ~105 g/day for a 65 kg person, which almost no Indian vegetarian diet
+    // reaches, so users missed the target every day. Training goals stay higher.
     val proteinPerKg = when (goal) {
-        "muscle_gain" -> 2.0f // 2g per kg body weight
-        "weight_loss" -> 1.8f // preserve muscle during deficit
-        else -> 1.6f // general health
+        "muscle_gain" -> 2.0f // within the 1.6–2.2 g/kg range used for resistance training
+        "weight_loss" -> 1.2f // preserves lean mass during a deficit
+        "weight_gain" -> 1.2f
+        else -> 1.0f // a little above the ICMR RDA
     }
     val protein = weightKg * proteinPerKg 
     
