@@ -6,7 +6,8 @@ The scoring engine (scoring.py) has already locked:
 
 This module's ONLY job is to ask the LLM to EXPLAIN those locked scores in plain language.
 The LLM outputs: health_reason, summary, ingredients_analysis, nutrition_analysis.
-It does NOT output any numeric scores.
+It does NOT output any numeric scores or verdicts. Allergy and diet conflicts are applied
+deterministically in services/personal.py.
 """
 
 import json
@@ -15,7 +16,7 @@ import time
 from app.core.config import settings
 from app.core.groq_manager import groq_manager
 from app.models.schemas import AIAnalysisResult
-from app.services.scoring import ScoringResult
+from app.services.scoring import ScoringResult, CATEGORY_LABELS, explain
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -46,84 +47,69 @@ async def analyze_product_detailed(
         "LOW (<40% — limited data, treat as estimate)"
     )
 
+    category_label = CATEGORY_LABELS.get(scoring.category_group, "packaged foods")
+    concerns_str = "\n".join(f"- {c}" for c in scoring.concerns) or "- none"
+    positives_str = "\n".join(f"- {p}" for p in scoring.positives) or "- none"
+    if user_profile:
+        profile_block = (
+            json.dumps(user_profile, indent=2) +
+            "\nRelate the product to this profile (goals, conditions such as diabetes or hypertension, diet) "
+            "in `health_reason` and `summary`. Allergy and diet conflicts are checked separately by the app; "
+            "do not invent allergens that are not in the ingredients."
+        )
+    else:
+        profile_block = "No profile. Give general advice for an Indian adult."
+
     prompt = f"""
-ROLE: Clinical Nutritionist — Text Explanation Specialist.
+ROLE: Nutritionist explaining a food score to an Indian consumer in plain, friendly English.
 
-CONTEXT:
-A deterministic scoring engine has already computed all numeric scores for "{product_name}".
-Your job is ONLY to explain those scores in clear, clinical language.
-You MUST NOT change or recompute the numeric score, BUT you MUST override `verdict`, `is_good_for_health`, and `safe_consumption_frequency` if you detect a critical ALLERGY hazard or severe DIETARY PROFILE violation.
+A deterministic scoring engine already rated "{product_name}". Do not recompute or contradict it.
+- Score: {scoring.health_score}/100, verdict {scoring.verdict}
+- Suggested amount: {scoring.safe_consumption_frequency}
+- Compared against: {category_label}
+- Data completeness: {confidence_label}
 
-LOCKED SCORES (do not alter):
-- health_score: {scoring.health_score} / 100
-- verdict: "{scoring.verdict}"
-- health_scale: {scoring.health_scale} / 10.0
-- is_good_for_health: {str(scoring.is_good_for_health).lower()}
-- safe_consumption_frequency: "{scoring.safe_consumption_frequency}"
-- data_confidence: {confidence_label}
-- alcohol_capped: {str(scoring.alcohol_capped).lower()}
-- category_group: "{scoring.category_group}"
+WHAT LOWERED THE SCORE (biggest first):
+{concerns_str}
 
-USER DIETARY PROFILE (CRITICAL CONTEXT):
-{json.dumps(user_profile, indent=2) if user_profile else "No specific dietary preferences set. Provide general health advice."}
-If the user has dietary preferences (e.g., Vegan, Keto), health tags (e.g., Diabetic), or ALLERGIES, you MUST explicitly address how this product aligns or conflicts with their specific profile in the `health_reason` and `summary`.
-CRITICAL OVERRIDE: If the product contains an ingredient the user is allergic to, or blatantly violates their dietary preference (e.g. meat for a Vegan), you MUST change the `verdict` to "Dangerous", set `is_good_for_health` to false, and set `safe_consumption_frequency` to "Avoid completely".
+WHAT HELPED:
+{positives_str}
 
-SCORE BREAKDOWN (what drove the score):
-Pillar scores:
-{pillar_str}
-
-Deductions applied:
+Full breakdown (for reference only, never quote point values or internal names):
 {deductions_str}
-
-Bonuses applied:
 {bonuses_str}
 
-RAW PRODUCT DATA (use for ingredient-level explanations):
-Product: "{product_name}"
+USER PROFILE:
+{profile_block}
+
+PRODUCT DATA:
 Ingredients text: "{ingredients_text}"
 Structured ingredients: {ingredients_list_str}
-Nutritional facts (per 100g): {nutrients_str}
+Nutrition per 100 g: {nutrients_str}
 
-YOUR TASKS:
-1. Write `health_reason`: 1–2 sentences explaining WHY the product scored {scoring.health_score}/100.
-   - Reference the actual deductions by name and number (e.g. "High sugar at 56g/100g cost -12 points")
-   - Reference the category context ("{scoring.category_group}" group thresholds were used)
-   - Do NOT mention the score number itself — explain the reasons, not the outcome
+RULES:
+- Only describe a nutrient as high or low if the lists above say so. Never call something "high" that
+  is not in "WHAT LOWERED THE SCORE".
+- Use grams per 100 g with at most one decimal. No jargon: never write "NOVA", "pillar", "floor",
+  "deduction", "points", "category group" or the score number.
+- If the ingredients text is empty, return [] for ingredients_analysis and say the ingredient list is
+  missing. Never guess ingredients.
 
-2. Write `summary`: 2 sentences. First: what the product is and its dominant nutritional characteristic.
-   Second: practical takeaway for the consumer based on "{scoring.safe_consumption_frequency}".
+TASKS:
+1. health_reason: 1–2 sentences on why it rated this way, naming the top concerns and positives.
+2. summary: 2 sentences. First: what the product is and what stands out. Second: a practical tip
+   (portion, when to eat it, or what to pair it with) consistent with "{scoring.safe_consumption_frequency}".
+3. ingredients_analysis: for each ingredient (max 12, most important first): name, quantity
+   ("Not specified" unless known), status "Good" | "Bad" | "Neutral", reason (1 short sentence).
+4. nutrition_analysis: energy_estimation (kcal per 100 g and what that means for a typical portion),
+   macronutrient_balance (carbs/protein/fat per 100 g and whether that suits {category_label}).
 
-3. Write `ingredients_analysis`: 
-   - CRITICAL RULE: If the "Ingredients text" or "Structured ingredients" is empty, DO NOT GUESS OR HALLUCINATE INGREDIENTS. Output an empty list `[]` for `ingredients_analysis` and explicitly mention the missing data in the `health_reason` and `summary`.
-   - If ingredients exist, for EACH ingredient in the structured list, output:
-     - name: ingredient name (clean, human-readable)
-     - quantity: exact value from nutritional facts if available, else "Not specified"
-     - status: "Good", "Bad", or "Neutral" — must align with the deductions/bonuses above
-     - reason: 1 sentence scientific explanation referencing actual quantities where possible
-
-4. Write `nutrition_analysis`:
-   - energy_estimation: How much energy this product provides. Use exact kcal from nutritional facts.
-     Explain the metabolic impact (quick energy vs sustained, empty calories vs nutrient-dense).
-   - macronutrient_balance: Summarise the carbs/protein/fat ratio. State the actual numbers.
-     Comment on whether the balance is appropriate for the "{scoring.category_group}" food category.
-
-OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema:
+Return ONLY valid JSON:
 {{
     "health_reason": "<string>",
     "summary": "<string>",
-    "ingredients_analysis": [
-        {{
-            "name": "<string>",
-            "quantity": "<string>",
-            "status": "Good" | "Bad" | "Neutral",
-            "reason": "<string>"
-        }}
-    ],
-    "nutrition_analysis": {{
-        "energy_estimation": "<string>",
-        "macronutrient_balance": "<string>"
-    }}
+    "ingredients_analysis": [{{"name": "<string>", "quantity": "<string>", "status": "Good", "reason": "<string>"}}],
+    "nutrition_analysis": {{"energy_estimation": "<string>", "macronutrient_balance": "<string>"}}
 }}
 """
 
@@ -174,37 +160,67 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema:
         logger.debug(f"Groq API Response:\n{response_text}")
         
         llm_output = json.loads(response_text)
+        fallback = explain(scoring, product_name, nutrients)
+        nutrition = llm_output.get("nutrition_analysis") or {}
+        if not isinstance(nutrition, dict):
+            nutrition = {}
 
         # Merge locked scores with LLM-generated text
         return AIAnalysisResult(
-            verdict=scoring.verdict,
-            is_good_for_health=scoring.is_good_for_health,
-            health_scale=scoring.health_scale,
-            safe_consumption_frequency=scoring.safe_consumption_frequency,
-            health_score=scoring.health_score,
-            health_reason=llm_output.get("health_reason", "Analysis unavailable."),
-            summary=llm_output.get("summary", "Analysis unavailable."),
-            ingredients_analysis=llm_output.get("ingredients_analysis", []),
-            nutrition_analysis=llm_output.get("nutrition_analysis", {
-                "energy_estimation": "Unavailable",
-                "macronutrient_balance": "Unavailable"
-            }),
+            **_locked(scoring),
+            health_reason=_text(llm_output.get("health_reason")) or fallback["health_reason"],
+            summary=_text(llm_output.get("summary")) or fallback["summary"],
+            ingredients_analysis=_clean_ingredients(llm_output.get("ingredients_analysis")),
+            nutrition_analysis={
+                "energy_estimation": _text(nutrition.get("energy_estimation"))
+                                     or fallback["nutrition_analysis"]["energy_estimation"],
+                "macronutrient_balance": _text(nutrition.get("macronutrient_balance"))
+                                         or fallback["nutrition_analysis"]["macronutrient_balance"],
+            },
         )
 
     except Exception as e:
         logger.error(f"Nutritionist Agent: LLM text generation failed: {e}", exc_info=True)
-        # Fallback: use locked scores with minimal text
-        return AIAnalysisResult(
-            verdict=scoring.verdict,
-            is_good_for_health=scoring.is_good_for_health,
-            health_scale=scoring.health_scale,
-            safe_consumption_frequency=scoring.safe_consumption_frequency,
-            health_score=scoring.health_score,
-            health_reason="AI explanation unavailable — scores computed from nutritional data.",
-            summary="Scores are based on nutritional analysis. AI explanation service is temporarily unavailable.",
-            ingredients_analysis=[],
-            nutrition_analysis={
-                "energy_estimation": "Unavailable",
-                "macronutrient_balance": "Unavailable"
-            }
-        )
+        # The deterministic explanation is complete on its own; users never see an "unavailable" message.
+        return AIAnalysisResult(**_locked(scoring), **explain(scoring, product_name, nutrients), ingredients_analysis=[])
+
+
+def _locked(scoring: ScoringResult) -> dict:
+    return {
+        "verdict": scoring.verdict,
+        "is_good_for_health": scoring.is_good_for_health,
+        "health_scale": scoring.health_scale,
+        "safe_consumption_frequency": scoring.safe_consumption_frequency,
+        "health_score": scoring.health_score,
+        "score_breakdown": breakdown(scoring),
+    }
+
+
+def breakdown(scoring: ScoringResult) -> dict:
+    return {
+        "concerns": scoring.concerns,
+        "positives": scoring.positives,
+        "category": CATEGORY_LABELS.get(scoring.category_group, "packaged foods"),
+        "allergens": scoring.allergen_warnings,
+        "data_confidence": scoring.data_confidence,
+    }
+
+
+def _text(v) -> str:
+    return v.strip() if isinstance(v, str) else ""
+
+
+def _clean_ingredients(items) -> list:
+    """Drops malformed rows instead of failing the whole analysis on one bad status value."""
+    out = []
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict) or not _text(it.get("name")):
+            continue
+        status = _text(it.get("status")).capitalize()
+        out.append({
+            "name": _text(it.get("name")),
+            "quantity": _text(it.get("quantity")) or "Not specified",
+            "status": status if status in ("Good", "Bad", "Neutral") else "Neutral",
+            "reason": _text(it.get("reason")),
+        })
+    return out[:15]

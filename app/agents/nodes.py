@@ -2,8 +2,8 @@ import json
 import logging
 from app.core.groq_manager import groq_manager
 from app.agents.state import AgentState
-from app.agents.nutritionist import analyze_product_detailed
-from app.services.scoring import compute_health_score
+from app.agents.nutritionist import analyze_product_detailed, breakdown
+from app.services.scoring import compute_health_score, explain
 from app.core.config import settings
 from typing import Any, Dict
 
@@ -191,6 +191,8 @@ async def nutritionist_agent(state: AgentState) -> Dict[str, Any]:
         categories=state.get("category_tag"),
         serving_size=state.get("serving_size"),
         product_name=state.get("product_name"),
+        food_groups=state.get("food_groups") or [],
+        off_allergens=state.get("off_allergens"),
     )
 
     logger.info(
@@ -218,6 +220,16 @@ async def nutritionist_agent(state: AgentState) -> Dict[str, Any]:
             "data_confidence":   scoring.data_confidence,
             "category_group":    scoring.category_group,
             "alcohol_capped":    scoring.alcohol_capped,
+            "fallback":          {
+                "verdict": scoring.verdict,
+                "is_good_for_health": scoring.is_good_for_health,
+                "health_scale": scoring.health_scale,
+                "safe_consumption_frequency": scoring.safe_consumption_frequency,
+                "health_score": scoring.health_score,
+                "score_breakdown": breakdown(scoring),
+                **explain(scoring, state.get("product_name"), state.get("nutrients") or {}),
+                "ingredients_analysis": [],
+            },
         },
         "analysis_result": result,
     }
@@ -252,83 +264,33 @@ async def response_synthesizer(state: AgentState) -> Dict[str, Any]:
         logger.info(f"Response Synthesizer: non-food rejection for '{product_name}'")
         return {
             "final_response": {
-                "verdict": "PASS",
+                "verdict": None,
                 "is_good_for_health": False,
-                "health_reason": f"'{product_name}' is not a food or beverage product and cannot be nutritionally evaluated.",
+                "health_reason": f"'{product_name}' doesn't look like a food or drink, so it can't be rated.",
                 "health_scale": 1.0,
                 "safe_consumption_frequency": "Not applicable",
-                "health_score": 0,
-                "summary": (
-                    f"This product has been identified as a non-food item. "
-                    f"No nutritional analysis is applicable."
-                ),
+                "health_score": None,
+                "summary": "This looks like a non-food item. Nutrition ratings only apply to food and drinks.",
                 "ingredients_analysis": [],
-                "nutrition_analysis": {
-                    "energy_estimation": "Not applicable — non-food product.",
-                    "macronutrient_balance": "Not applicable — non-food product."
-                }
+                "nutrition_analysis": None,
+                "score_breakdown": None,
             }
         }
 
-    # Case B: Full analysis available
+    # Case B: Full analysis available (the nutritionist already falls back to a deterministic
+    # explanation when the LLM fails, so this is the normal path)
     analysis_result = state.get("analysis_result")
     if analysis_result:
         logger.info("Response Synthesizer: full analysis available.")
         return {"final_response": analysis_result.model_dump()}
 
-    # Case C: LLM failed but scoring succeeded — use locked scores, fallback text
+    # Case C: scoring succeeded but building the result failed — still a complete, plain answer
     scoring_result = state.get("scoring_result")
-    if scoring_result:
-        logger.warning("Response Synthesizer: LLM failed, falling back to scoring engine output.")
-        score = scoring_result.get("health_score", 0)
-        verdict = scoring_result.get("verdict", "PASS")
-        scale = round(score / 10.0, 1)
-        top_deduction = (scoring_result.get("deductions") or [{}])[0]
-        return {
-            "final_response": {
-                "verdict": verdict,
-                "is_good_for_health": score >= 60,
-                "health_reason": (
-                    f"Score of {score}/100 based on nutritional analysis. "
-                    f"Primary factor: {top_deduction.get('reason', 'multiple nutritional parameters')}. "
-                    f"AI explanation service is temporarily unavailable."
-                ),
-                "health_scale": scale,
-                "safe_consumption_frequency": (
-                    "Daily" if score >= 80 else
-                    "3–4 times per week" if score >= 65 else
-                    "Weekly" if score >= 50 else
-                    "Rarely" if score >= 35 else
-                    "Avoid"
-                ),
-                "health_score": score,
-                "summary": (
-                    f"Nutritional scoring completed with a score of {score}/100 (verdict: {verdict}). "
-                    f"AI-generated explanation is unavailable — scores are based on {int(scoring_result.get('data_confidence', 0) * 100)}% data confidence."
-                ),
-                "ingredients_analysis": [],
-                "nutrition_analysis": {
-                    "energy_estimation": "AI explanation unavailable.",
-                    "macronutrient_balance": "AI explanation unavailable."
-                }
-            }
-        }
+    if scoring_result and scoring_result.get("fallback"):
+        logger.warning("Response Synthesizer: using deterministic scoring explanation.")
+        return {"final_response": scoring_result["fallback"]}
 
-    # Last resort: everything failed
+    # Last resort: everything failed. Returning nothing makes the API report a retryable error
+    # instead of caching a fake score of 0.
     logger.error("Response Synthesizer: both scoring and LLM failed.")
-    return {
-        "final_response": {
-            "verdict": "PASS",
-            "is_good_for_health": False,
-            "health_reason": "Analysis pipeline failed. Data could not be processed.",
-            "health_scale": 1.0,
-            "safe_consumption_frequency": "Unknown",
-            "health_score": 0,
-            "summary": "Our analysis system encountered an error. Please try scanning again.",
-            "ingredients_analysis": [],
-            "nutrition_analysis": {
-                "energy_estimation": "Unavailable",
-                "macronutrient_balance": "Unavailable"
-            }
-        }
-    }
+    raise RuntimeError("Analysis pipeline produced no result")

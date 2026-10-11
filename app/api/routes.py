@@ -4,7 +4,10 @@ from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.models.products import Product, UserAddedProduct, PersonalizedAnalysis
-from app.services.openfoodfacts import get_product_from_api
+from app.services.openfoodfacts import OFFUnavailable, get_product_from_api
+from app.services.alternatives import ALTERNATIVES_VERSION, find_alternatives, filter_for_user
+from app.services.personal import personal_alerts, apply_personal_alerts
+from app.services.scoring import compute_health_score, extract_allergens
 from app.models.schemas import ProductResponse, ReportMissingRequest, ManualProductRequest, UserRegister, UserLogin, ContributeProductRequest
 from app.api.deps import create_access_token, get_current_user, get_password_hash, verify_password, get_current_user_optional
 from app.models.users import User, UserProfile, UserScan
@@ -17,13 +20,14 @@ from typing import List
 
 # --- 1. IMPORT THE LANGGRAPH WORKFLOW ---
 from app.agents.workflow import nutrition_app_workflow
+import asyncio
 import logging
 import base64
 import hashlib
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import Request
 from app.core.limiter import limiter
 
@@ -161,45 +165,33 @@ async def scan_product(
     if not product:
         # 2. FETCH EXTERNAL DATA IF NOT IN CACHE
         logger.info(f"Fetching from OFF API for {barcode}")
-        raw_data = await get_product_from_api(barcode)
+        try:
+            raw_data = await get_product_from_api(barcode)
+        except OFFUnavailable:
+            raise HTTPException(status_code=503, detail="The product database is busy. Please try again in a moment.")
         logger.info(f"OFF API response received for {barcode}")
         if not raw_data:
             raise HTTPException(status_code=404, detail="Product not found in global database.")
 
-        ingredients_list = raw_data.get("ingredients_tags", [])
-        if not ingredients_list:
-            ingredients_list = ["Unknown Ingredients"]
-
-        product = Product(
-            barcode=barcode,
-            name=raw_data.get("name", "Unknown"),
-            brand=raw_data.get("brand"),
-            image_url=raw_data.get("image_url"),
-            quantity=raw_data.get("quantity", ""),
-            ingredients_text=raw_data.get("ingredients_text", ""),
-            nutrients=raw_data.get("nutrients", {}), 
-            nova_group=raw_data.get("nova_group"),
-            nova_tags=raw_data.get("nova_tags") or [],
-            source="OFF",
-            ingredients=ingredients_list,
-            nutri_score=raw_data.get("nutri_score"),
-            categories=raw_data.get("categories"), 
-            countries=raw_data.get("countries"),
-            allergens=raw_data.get("allergens"),
-            additives_tags=raw_data.get("additives_tags") or [],
-            serving_size=raw_data.get("serving_size"),
-            ecoscore_grade=raw_data.get("ecoscore_grade"),
-            nutrient_levels=raw_data.get("nutrient_levels", {}),
-            packaging=raw_data.get("packaging"),
-        )
+        product = Product(barcode=barcode, name=raw_data.get("name") or "Unknown", source="OFF", ingredients=[])
+        _apply_off_data(product, raw_data)
         session.add(product)
     else:
         product.scan_count += 1
+        # Rows analysed before v3 stored only the broadest category, which skewed their scores.
+        # Refresh them from OFF once; if OFF is down, carry on with what we have.
+        if product.source == "OFF" and (product.analysis_version or 0) < GENERIC_ANALYSIS_VERSION:
+            try:
+                raw_data = await get_product_from_api(barcode, retries=0)
+            except OFFUnavailable:
+                raw_data = None
+            if raw_data:
+                _apply_off_data(product, raw_data)
         session.add(product)
 
     # 3. ANALYSIS: generic results are cached on the product and shared; personalized results are
-    #    cached per user and only reused while that user's profile is unchanged. (Previously the first
-    #    scanner's personalized verdict, including allergy conclusions, was cached and shown to everyone.)
+    #    cached per user and only reused while that user's profile (and the analysis version) is
+    #    unchanged. Never cache personalized output on Product.
     profile_ctx = _profile_context(profile)
     personalized = any(v for v in profile_ctx.values())
 
@@ -207,7 +199,9 @@ async def scan_product(
     cached_personal = None
     profile_hash = None
     if personalized:
-        profile_hash = hashlib.sha256(json.dumps(profile_ctx, sort_keys=True, default=str).encode()).hexdigest()
+        profile_hash = hashlib.sha256(json.dumps(
+            {"analysis_version": GENERIC_ANALYSIS_VERSION, **profile_ctx}, sort_keys=True, default=str
+        ).encode()).hexdigest()
         cached_stmt = select(PersonalizedAnalysis).where(
             PersonalizedAnalysis.user_id == current_user.id,
             PersonalizedAnalysis.barcode == barcode,
@@ -220,8 +214,20 @@ async def scan_product(
         logger.info(f"Serving cached generic analysis for barcode {barcode}")
         agent_output = {k: getattr(product, k) for k in ANALYSIS_FIELDS}
 
-    if agent_output is None:
-        agent_output = await _run_analysis(product, profile_ctx if personalized else {})
+    # Run the LLM analysis and the alternatives search concurrently; both are network-bound.
+    analysis_coro = _run_analysis(product, profile_ctx if personalized else {}) if agent_output is None else None
+    alternatives_coro = _refresh_alternatives(product) if _alternatives_stale(product) else None
+    results = await asyncio.gather(*(c for c in (analysis_coro, alternatives_coro) if c is not None))
+    if analysis_coro is not None:
+        agent_output = results[0]
+    if alternatives_coro is not None:
+        alts = results[-1]
+        if alts is not None:
+            product.alternatives = alts
+            product.alternatives_version = ALTERNATIVES_VERSION
+            product.alternatives_updated_at = datetime.utcnow()
+
+    if analysis_coro is not None:
         if agent_output is not None:
             if personalized:
                 if cached_personal:
@@ -254,18 +260,73 @@ async def scan_product(
         session.add(UserScan(user_id=current_user.id, barcode=barcode))
         await session.commit()
 
-    # Build response: Product Data + (possibly personalized) Analysis
+    # Build response: Product Data + (possibly personalized) Analysis + per-user safety checks
     response_data = product.model_dump()
     response_data.update(agent_output)
+    response_data["alternatives"] = filter_for_user(product.alternatives, profile_ctx)
+    if agent_output.get("health_score") is not None:
+        allergens = extract_allergens(product.ingredients_text or "", product.allergens)
+        alerts = personal_alerts(allergens, product.diet_tags, product.ingredients_text, profile_ctx)
+        response_data = apply_personal_alerts(response_data, alerts)
     return response_data
+
+
+def _apply_off_data(product: Product, raw: dict) -> None:
+    product.name = raw.get("name") or product.name or "Unknown"
+    product.brand = raw.get("brand")
+    product.image_url = raw.get("image_url") or product.image_url
+    product.quantity = raw.get("quantity", "")
+    product.ingredients_text = raw.get("ingredients_text", "")
+    product.ingredients = raw.get("ingredients_tags") or ["Unknown Ingredients"]
+    product.nutrients = raw.get("nutrients", {})
+    product.nova_group = raw.get("nova_group")
+    product.nova_tags = raw.get("nova_tags") or []
+    product.nutri_score = raw.get("nutri_score")
+    product.categories = raw.get("categories")
+    product.food_groups = raw.get("food_groups") or []
+    product.diet_tags = raw.get("diet_tags") or []
+    product.countries = raw.get("countries")
+    product.allergens = raw.get("allergens")
+    product.additives_tags = raw.get("additives_tags") or []
+    product.serving_size = raw.get("serving_size")
+    product.ecoscore_grade = raw.get("ecoscore_grade")
+    product.nutrient_levels = raw.get("nutrient_levels", {})
+    product.packaging = raw.get("packaging")
+    product.updated_at = datetime.utcnow()
+
+
+def _alternatives_stale(product: Product) -> bool:
+    if product.source != "OFF" or not product.categories:
+        return False
+    if (product.alternatives_version or 0) < ALTERNATIVES_VERSION or product.alternatives is None:
+        return True
+    updated = product.alternatives_updated_at
+    return updated is None or datetime.utcnow() - updated > timedelta(days=30)
+
+
+async def _refresh_alternatives(product: Product) -> Optional[list]:
+    """None means the search failed (keep what we had); [] means nothing better exists."""
+    try:
+        current = compute_health_score(
+            nutrients=product.nutrients or {}, nova_group=product.nova_group,
+            nutri_score=product.nutri_score, additives_tags=product.additives_tags or [],
+            nutrient_levels=product.nutrient_levels or {}, ingredients=product.ingredients or [],
+            ingredients_text=product.ingredients_text or "", categories=product.categories,
+            serving_size=product.serving_size, product_name=product.name,
+            food_groups=product.food_groups or [], off_allergens=product.allergens,
+        )
+        return await find_alternatives(product, current.health_score)
+    except Exception as e:
+        logger.warning(f"Alternatives lookup failed for {product.barcode}: {e}")
+        return None
 
 
 ANALYSIS_FIELDS = [
     "verdict", "is_good_for_health", "health_reason", "health_scale",
     "safe_consumption_frequency", "health_score", "summary",
-    "ingredients_analysis", "nutrition_analysis",
+    "ingredients_analysis", "nutrition_analysis", "score_breakdown",
 ]
-GENERIC_ANALYSIS_VERSION = 2
+GENERIC_ANALYSIS_VERSION = 3
 
 
 def _profile_context(profile: Optional[UserProfile]) -> dict:
@@ -292,6 +353,8 @@ async def _run_analysis(product: Product, profile_ctx: dict) -> Optional[dict]:
         "ingredients": product.ingredients,
         "ingredients_text": product.ingredients_text or "",
         "category_tag": product.categories or "",
+        "food_groups": product.food_groups or [],
+        "off_allergens": product.allergens,
         "is_food": True,
         "analysis_result": None,
         "final_response": {},
@@ -339,15 +402,7 @@ async def get_scan_history(
     result = await session.execute(statement)
     products = result.scalars().all()
     
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_products = []
-    for p in products:
-        if p.barcode not in seen:
-            seen.add(p.barcode)
-            unique_products.append(p)
-
-    return unique_products
+    return _history_rows(products)
 
 @router.post("/report-missing")
 async def report_missing_product(
@@ -458,15 +513,21 @@ async def get_user_history(
     # Use unique() since a user might scan the same product multiple times
     products = result.scalars().unique().all()
     
-    # We might have duplicates if they scanned multiple times, let's keep only unique products while preserving order
-    seen = set()
-    unique_products = []
-    for p in products:
-        if p.barcode not in seen:
-            seen.add(p.barcode)
-            unique_products.append(p)
+    return _history_rows(products)
 
-    return unique_products
+
+def _history_rows(products) -> list:
+    """Unique products, newest first. Alternatives are left out: they are only safe to show after
+    per-user allergy filtering, which happens on scan."""
+    seen, rows = set(), []
+    for p in products:
+        if p.barcode in seen:
+            continue
+        seen.add(p.barcode)
+        row = p.model_dump()
+        row["alternatives"] = []
+        rows.append(row)
+    return rows
 
 @router.get("/profile")
 async def get_profile(
