@@ -1687,11 +1687,8 @@ fun AiPersonalVerdictCard(
                     }
                 }
                 verdictText != null -> {
-                    val cleanVerdict = verdictText
-                        .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
-                        .trim()
                     Text(
-                        text = cleanVerdict,
+                        text = com.example.healthheatv2.ui.components.AiText.annotated(verdictText),
                         color = colors.textPrimary,
                         fontSize = 14.sp,
                         lineHeight = 21.sp

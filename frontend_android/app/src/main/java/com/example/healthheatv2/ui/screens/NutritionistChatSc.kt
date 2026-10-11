@@ -734,7 +734,10 @@ fun ChatBubble(
     val hasThink = textParts.size > 1 && message.text.contains("<think>")
     val thinkText = if (hasThink) textParts[0].substringAfter("<think>").trim() else null
     val rawMainText = if (hasThink) textParts[1].trim() else message.text
-    val mainText = rawMainText.replace(Regex("[*#_~`]"), "") // Strip all markdown symbols to ensure purely clean text
+    // Bold and lists render as formatting; engine tags and stray Markdown symbols are removed
+    val mainText = if (message.isUser) rawMainText else com.example.healthheatv2.ui.components.AiText.plain(rawMainText)
+    val mainTextStyled = if (message.isUser) androidx.compose.ui.text.AnnotatedString(rawMainText)
+        else com.example.healthheatv2.ui.components.AiText.annotated(rawMainText)
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -855,7 +858,7 @@ fun ChatBubble(
 
                     if (mainText.isNotBlank()) {
                         Text(
-                            text = mainText,
+                            text = mainTextStyled,
                             color = if (message.isUser) Color.White else colors.textPrimary,
                             fontSize = 15.sp,
                             lineHeight = 22.sp

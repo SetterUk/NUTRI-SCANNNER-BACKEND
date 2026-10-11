@@ -125,7 +125,7 @@ class VoiceNutritionistCoach(
             rawText
         }
         return textWithoutThink
-            .replace(Regex("^(⚡ \\[On-Device Nano\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline Fallback\\])\\s*\n"), "")
+            .let { com.example.healthheatv2.ui.components.AiText.stripTier(it) }
             .replace(Regex("\\[LOG_FOOD:.*?\\]"), "")
             .replace(Regex("\\*\\(.*?\\)\\*"), "") // remove logging confirmation italics
             .replace(Regex("[*#_~`]"), "") // remove markdown characters

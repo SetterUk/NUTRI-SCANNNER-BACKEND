@@ -275,12 +275,8 @@ fun AiMealPlanCard(
                     }
                 }
                 planText != null -> {
-                    // Strip the tier prefix [⚡ [Gemma 4 E2B], ☁️ [Cloud AI], 🔋 [Offline]]
-                    val cleanPlan = planText
-                        .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
-                        .trim()
                     Text(
-                        text = cleanPlan,
+                        text = com.example.healthheatv2.ui.components.AiText.annotated(planText),
                         color = colors.textPrimary,
                         fontSize = 14.sp,
                         lineHeight = 22.sp
