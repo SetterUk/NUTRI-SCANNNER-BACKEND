@@ -72,6 +72,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val previousUserId = prefs.getString(KEY_LAST_USER_ID, null)
                 if (userId != null && previousUserId != null && previousUserId != userId) {
                     wipePersonalData()
+                    com.example.healthheatv2.services.TrackingSync.reset(getApplication())
                     prefs.edit().remove(KEY_CACHED_PROFILE).remove("onboarding_seen").apply()
                     _userProfile.value = null
                 }
@@ -126,6 +127,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             com.example.healthheatv2.data.FoodSeeder.ensureSeeded(getApplication(), db.nutritionDao())
         }
         prefs.edit().clear().apply()
+        com.example.healthheatv2.services.TrackingSync.reset(getApplication())
         signOut()
         Result.success(Unit)
     } catch (e: Exception) {
@@ -159,6 +161,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val sql = db.openHelper.writableDatabase
             for (table in com.example.healthheatv2.data.UserDatabase.PERSONAL_TABLES) {
                 sql.execSQL("DELETE FROM $table")
+            }
+        }
+    }
+
+    /** A new weight reading also updates the profile, so calorie and protein targets follow it. */
+    fun updateWeight(weightKg: Float) {
+        viewModelScope.launch {
+            try {
+                RetrofitClient.apiService.updateProfile(mapOf("weight_kg" to weightKg))
+                fetchProfile()
+            } catch (e: Exception) {
+                android.util.Log.e("AuthViewModel", "Failed to update weight on profile", e)
             }
         }
     }

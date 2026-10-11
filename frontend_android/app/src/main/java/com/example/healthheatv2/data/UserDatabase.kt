@@ -29,9 +29,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MealTemplate::class,
         MealItem::class,
         SavedChatMessage::class,
-        SavedDailyPlan::class
+        SavedDailyPlan::class,
+        WeightLog::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -40,6 +41,7 @@ abstract class UserDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
     abstract fun mealLogDao(): MealLogDao
     abstract fun nutritionDao(): NutritionDao
+    abstract fun weightLogDao(): WeightLogDao
 
     companion object {
         @Volatile
@@ -47,7 +49,7 @@ abstract class UserDatabase : RoomDatabase() {
 
         /** Tables holding one person's data; wiped when a different account signs in on this phone. */
         val PERSONAL_TABLES = listOf(
-            "scanned_products", "meal_logs", "user_profiles", "SavedChatMessage", "SavedDailyPlan"
+            "scanned_products", "meal_logs", "weight_logs", "user_profiles", "SavedChatMessage", "SavedDailyPlan"
         )
 
         /**
@@ -63,6 +65,27 @@ abstract class UserDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v10 -> v11: meal logs sync to the account. Each meal gets a stable random id, a dirty flag
+         * (existing meals start dirty so they upload once) and soft deletion; weight_logs is new.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN clientId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE meal_logs SET clientId = lower(hex(randomblob(16))) WHERE clientId = ''")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_meal_logs_clientId` ON `meal_logs` (`clientId`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `weight_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`measuredAt` INTEGER NOT NULL, `weightKg` REAL NOT NULL, `clientId` TEXT NOT NULL, " +
+                        "`dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_weight_logs_clientId` ON `weight_logs` (`clientId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_weight_logs_measuredAt` ON `weight_logs` (`measuredAt`)")
+            }
+        }
+
         fun getDatabase(context: Context): UserDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -70,7 +93,7 @@ abstract class UserDatabase : RoomDatabase() {
                     UserDatabase::class.java,
                     "healthheat_user_database"
                 )
-                .addMigrations(MIGRATION_9_10)
+                .addMigrations(MIGRATION_9_10, MIGRATION_10_11)
                 // Only pre-release development schemas may be wiped.
                 .fallbackToDestructiveMigrationFrom(true, 1, 2, 3, 4, 5, 6, 7, 8)
                 .build()

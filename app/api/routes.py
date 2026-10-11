@@ -655,9 +655,13 @@ async def delete_account(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Permanently deletes the user, their profile, scan history and personalized analyses."""
+    """Permanently deletes the user, their profile, scan history, meal and weight logs, and
+    personalized analyses."""
     from sqlalchemy import delete as sa_delete
+    from app.models.tracking import MealEntry, WeightEntry
     uid = current_user.id
+    await session.execute(sa_delete(MealEntry).where(MealEntry.user_id == uid))
+    await session.execute(sa_delete(WeightEntry).where(WeightEntry.user_id == uid))
     await session.execute(sa_delete(PersonalizedAnalysis).where(PersonalizedAnalysis.user_id == uid))
     await session.execute(sa_delete(UserScan).where(UserScan.user_id == uid))
     await session.execute(sa_delete(UserProfile).where(UserProfile.user_id == uid))

@@ -118,6 +118,49 @@ data class FoodResponse(
     @SerializedName("scanned_at") val scannedAt: String? = null
 )
 
+// ── Meal/weight sync (/api/tracking/sync); times are epoch milliseconds ──
+data class SyncMeal(
+    @SerializedName("client_id") val clientId: String,
+    @SerializedName("logged_at_ms") val loggedAtMs: Long,
+    @SerializedName("meal_slot") val mealSlot: String,
+    @SerializedName("food_id") val foodId: String,
+    @SerializedName("food_name") val foodName: String,
+    @SerializedName("quantity") val quantity: Float,
+    @SerializedName("unit") val unit: String,
+    @SerializedName("calories") val calories: Float,
+    @SerializedName("protein") val protein: Float,
+    @SerializedName("carbs") val carbs: Float,
+    @SerializedName("fat") val fat: Float,
+    @SerializedName("fiber") val fiber: Float,
+    @SerializedName("iron") val iron: Float,
+    @SerializedName("calcium") val calcium: Float,
+    @SerializedName("zinc") val zinc: Float,
+    @SerializedName("b12") val b12: Float,
+    @SerializedName("vitamin_d") val vitaminD: Float,
+    @SerializedName("folate") val folate: Float,
+    @SerializedName("is_estimated") val isEstimated: Boolean,
+    @SerializedName("deleted") val deleted: Boolean
+)
+
+data class SyncWeight(
+    @SerializedName("client_id") val clientId: String,
+    @SerializedName("measured_at_ms") val measuredAtMs: Long,
+    @SerializedName("weight_kg") val weightKg: Float,
+    @SerializedName("deleted") val deleted: Boolean
+)
+
+data class TrackingSyncRequest(
+    @SerializedName("since_ms") val sinceMs: Long?,
+    @SerializedName("meals") val meals: List<SyncMeal>,
+    @SerializedName("weights") val weights: List<SyncWeight>
+)
+
+data class TrackingSyncResponse(
+    @SerializedName("server_time_ms") val serverTimeMs: Long,
+    @SerializedName("meals") val meals: List<SyncMeal>?,
+    @SerializedName("weights") val weights: List<SyncWeight>?
+)
+
 data class ApiChatMessage(
     @SerializedName("role") val role: String,
     @SerializedName("content") val content: String
@@ -160,6 +203,10 @@ interface ApiService {
 
     @POST("/api/chat")
     suspend fun chat(@Body request: ChatRequest): ChatResponse
+
+    /** Uploads changed meal/weight rows and returns everything changed on the server since sinceMs. */
+    @POST("/api/tracking/sync")
+    suspend fun syncTracking(@Body request: TrackingSyncRequest): TrackingSyncResponse
 
     /** Permanently deletes the account and all server-side data (required by Google Play). */
     @retrofit2.http.DELETE("/api/account")

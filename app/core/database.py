@@ -6,6 +6,7 @@ from app.core.config import settings
 # Import models to ensure they are registered with SQLModel.metadata
 from app.models.products import Product, UserAddedProduct, PersonalizedAnalysis
 from app.models.users import User, UserProfile, UserScan
+from app.models.tracking import MealEntry, WeightEntry
 
 
 engine = create_async_engine(

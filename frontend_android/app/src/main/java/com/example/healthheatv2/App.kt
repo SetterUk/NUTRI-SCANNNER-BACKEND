@@ -194,6 +194,22 @@ fun App(modifier: Modifier = Modifier) {
         )
         val authViewModel: AuthViewModel = viewModel()
         val userProfile by authViewModel.userProfile.collectAsState()
+        val authState by authViewModel.authState.collectAsState()
+
+        // Keep meal and weight logs in the account: pull on start/sign-in, push shortly after changes.
+        LaunchedEffect(authState) {
+            com.example.healthheatv2.services.TrackingSync.sync(context)
+            kotlinx.coroutines.flow.combine(
+                userDatabase.mealLogDao().observeDirtyCount(),
+                userDatabase.weightLogDao().observeDirtyCount()
+            ) { meals, weights -> meals + weights }
+                .collect { pending ->
+                    if (pending > 0) {
+                        kotlinx.coroutines.delay(2_000) // batch quick successive edits
+                        com.example.healthheatv2.services.TrackingSync.sync(context)
+                    }
+                }
+        }
 
         // Simple rule:
         // - Not logged in → Auth screen

@@ -46,6 +46,7 @@ import com.example.healthheatv2.ui.components.NextStepCard
 import com.example.healthheatv2.ui.components.WeekCard
 import com.example.healthheatv2.ui.components.CompactScanCard
 import com.example.healthheatv2.ui.components.ReminderPromptCard
+import com.example.healthheatv2.ui.components.WeightCard
 import com.example.healthheatv2.notifications.EveningReminder
 import com.example.healthheatv2.services.MealCandidate
 import com.example.healthheatv2.services.NutritionEngine
@@ -102,6 +103,8 @@ fun SearchHubScreen(
     val eatenCalories = todayMeals.sumOf { it.calories.toDouble() }.toFloat()
     val eatenProtein = todayMeals.sumOf { it.protein.toDouble() }.toFloat()
     val eatenFibre = todayMeals.sumOf { it.fiber.toDouble() }.toFloat()
+    val weights by remember(nutritionEngine) { nutritionEngine.db.weightLogDao().observeRecent(30) }
+        .collectAsState(initial = emptyList())
 
     var nextGap by remember { mutableStateOf<NutritionGap?>(null) }
     var ideas by remember { mutableStateOf<List<MealCandidate>>(emptyList()) }
@@ -214,6 +217,23 @@ fun SearchHubScreen(
                     Spacer(Modifier.height(12.dp))
                     WeekCard(summary = weekSummary, calorieTarget = calorieTarget, modifier = Modifier.padding(horizontal = 20.dp))
                 }
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                WeightCard(
+                    entries = weights,
+                    goal = localProfile.primaryGoal,
+                    onLog = { kg ->
+                        scope.launch {
+                            nutritionEngine.db.weightLogDao().insert(
+                                com.example.healthheatv2.data.WeightLog(measuredAt = System.currentTimeMillis(), weightKg = kg)
+                            )
+                        }
+                        authViewModel.updateWeight(kg)
+                    },
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
             }
 
             if (latestItem != null) {
