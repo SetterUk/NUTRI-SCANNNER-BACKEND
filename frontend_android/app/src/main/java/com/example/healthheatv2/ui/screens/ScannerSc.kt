@@ -227,7 +227,12 @@ private fun CameraPreviewWithOverlay(
                                 color = colors.accentGreen,
                                 strokeWidth = 2.5.dp
                             )
-                            Text("Analysing nutrition…", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (state.slow) "Waking up our server, this can take up to a minute…" else "Analysing nutrition…",
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }

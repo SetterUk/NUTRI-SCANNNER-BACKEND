@@ -23,20 +23,37 @@ data class NutritionAnalysis(
     @SerializedName("energy_estimation") val energyEstimation: String?,
     @SerializedName("macronutrient_balance") val macronutrientBalance: String?
 )
+/** A healthier product from the same category, already filtered for the user's allergies/diet. */
 data class AlternativeProduct(
-    @SerializedName("product_name") val name: String?,
-    @SerializedName("brands") val brand: String?,
-    @SerializedName("image_url") val imageUrl: String?,
-    @SerializedName("nutriscore_grade") val nutriScore: String?,
     @SerializedName("code") val code: String?,
-    @SerializedName("color_hex") val colorHex: String?
+    @SerializedName("name") val name: String?,
+    @SerializedName("brand") val brand: String?,
+    @SerializedName("image_url") val imageUrl: String?,
+    @SerializedName("nutri_score") val nutriScore: String?,
+    @SerializedName("health_score") val healthScore: Int?,
+    @SerializedName("verdict") val verdict: String?,
+    @SerializedName("why_better") val whyBetter: List<String>?
+)
+
+/** Plain-language reasons behind the score, computed by the backend's scoring engine (not the LLM). */
+data class ScoreBreakdown(
+    @SerializedName("concerns") val concerns: List<String>?,
+    @SerializedName("positives") val positives: List<String>?,
+    @SerializedName("category") val category: String?,
+    @SerializedName("allergens") val allergens: List<String>?,
+    @SerializedName("data_confidence") val dataConfidence: Double?
 )
 data class TokenData(
     @SerializedName("id_token") val idToken: String
 )
 data class AuthResponse(
     @SerializedName("access_token") val accessToken: String,
-    @SerializedName("token_type") val tokenType: String
+    @SerializedName("token_type") val tokenType: String,
+    @SerializedName("user") val user: AuthUser? = null
+)
+data class AuthUser(
+    @SerializedName("id") val id: Long?,
+    @SerializedName("email") val email: String?
 )
 data class ContributeRequest(
     @SerializedName("name") val name: String,
@@ -93,7 +110,12 @@ data class FoodResponse(
     @SerializedName("nutrient_levels") val nutrientLevels: Map<String, String>?,
     @SerializedName("packaging") val packaging: String?,
     @SerializedName("alternatives") val alternatives: List<AlternativeProduct>?,
-    @SerializedName("verdict_color") val verdictColor: String?
+    @SerializedName("verdict_color") val verdictColor: String?,
+    @SerializedName("score_breakdown") val scoreBreakdown: ScoreBreakdown? = null,
+    /** Allergy/diet conflicts for the signed-in user; when non-empty the verdict is AVOID. */
+    @SerializedName("personal_alerts") val personalAlerts: List<String>? = null,
+    /** Only set on /scan/history rows: when this user last scanned the product (UTC, ISO-8601). */
+    @SerializedName("scanned_at") val scannedAt: String? = null
 )
 
 data class ApiChatMessage(

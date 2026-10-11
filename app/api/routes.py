@@ -393,16 +393,16 @@ async def get_scan_history(
     # Fetch the latest 50 distinct scans for the user
     # Note: A real app might group by barcode or distinct, but this is simple history
     statement = (
-        select(Product)
+        select(Product, UserScan.scanned_at)
         .join(UserScan, UserScan.barcode == Product.barcode)
         .where(UserScan.user_id == current_user.id)
         .order_by(UserScan.scanned_at.desc())
-        .limit(50)
+        .limit(200)
     )
     result = await session.execute(statement)
-    products = result.scalars().all()
+    products = result.all()
     
-    return _history_rows(products)
+    return _history_rows(products, limit=50)
 
 @router.post("/report-missing")
 async def report_missing_product(
@@ -504,29 +504,31 @@ async def get_user_history(
     Returns the list of products previously scanned by the user, ordered by most recent.
     """
     statement = (
-        select(Product)
+        select(Product, UserScan.scanned_at)
         .join(UserScan, UserScan.barcode == Product.barcode)
         .where(UserScan.user_id == current_user.id)
         .order_by(UserScan.scanned_at.desc())
     )
     result = await session.execute(statement)
-    # Use unique() since a user might scan the same product multiple times
-    products = result.scalars().unique().all()
+    products = result.all()
     
     return _history_rows(products)
 
 
-def _history_rows(products) -> list:
-    """Unique products, newest first. Alternatives are left out: they are only safe to show after
-    per-user allergy filtering, which happens on scan."""
+def _history_rows(product_scans, limit: Optional[int] = None) -> list:
+    """Unique products, newest scan first, from (Product, scanned_at) rows. Alternatives are left
+    out: they are only safe to show after per-user allergy filtering, which happens on scan."""
     seen, rows = set(), []
-    for p in products:
+    for p, scanned_at in product_scans:
         if p.barcode in seen:
             continue
         seen.add(p.barcode)
         row = p.model_dump()
         row["alternatives"] = []
+        row["scanned_at"] = scanned_at
         rows.append(row)
+        if limit and len(rows) >= limit:
+            break
     return rows
 
 @router.get("/profile")

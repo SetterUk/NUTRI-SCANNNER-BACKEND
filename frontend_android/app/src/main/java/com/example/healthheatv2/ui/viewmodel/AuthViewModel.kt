@@ -65,6 +65,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val accessToken = backendResponse.accessToken
                 RetrofitClient.authToken = accessToken
                 prefs.edit().putString("backend_token", accessToken).apply()
+
+                // Meal logs, chat and scan results on this phone belong to whoever signed in last.
+                // A different account must not see them.
+                val userId = backendResponse.user?.id?.toString()
+                val previousUserId = prefs.getString(KEY_LAST_USER_ID, null)
+                if (userId != null && previousUserId != null && previousUserId != userId) {
+                    wipePersonalData()
+                    prefs.edit().remove(KEY_CACHED_PROFILE).remove("onboarding_seen").apply()
+                    _userProfile.value = null
+                }
+                if (userId != null) prefs.edit().putString(KEY_LAST_USER_ID, userId).apply()
                 
                 // Then optionally login to Firebase
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -126,10 +137,28 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val profile = RetrofitClient.apiService.getProfile()
+                val previous = _userProfile.value
+                if (previous != null && previous != profile) {
+                    // Saved scan results include allergy checks for the old profile.
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.example.healthheatv2.data.UserDatabase.getDatabase(getApplication()).productDao().deleteAll()
+                    }
+                }
                 _userProfile.value = profile
                 prefs.edit().putString(KEY_CACHED_PROFILE, gson.toJson(profile)).apply()
             } catch (e: Exception) {
                 android.util.Log.e("AuthViewModel", "Failed to fetch profile", e)
+            }
+        }
+    }
+
+    /** Deletes everything on this phone that belongs to one person (not the bundled food data). */
+    private suspend fun wipePersonalData() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val db = com.example.healthheatv2.data.UserDatabase.getDatabase(getApplication())
+        db.runInTransaction {
+            val sql = db.openHelper.writableDatabase
+            for (table in com.example.healthheatv2.data.UserDatabase.PERSONAL_TABLES) {
+                sql.execSQL("DELETE FROM $table")
             }
         }
     }
@@ -148,6 +177,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val KEY_CACHED_PROFILE = "cached_profile_json"
+        const val KEY_LAST_USER_ID = "last_backend_user_id"
         val gson = com.google.gson.Gson()
     }
 }

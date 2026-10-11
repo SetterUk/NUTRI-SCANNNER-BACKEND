@@ -45,6 +45,11 @@ abstract class UserDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: UserDatabase? = null
 
+        /** Tables holding one person's data; wiped when a different account signs in on this phone. */
+        val PERSONAL_TABLES = listOf(
+            "scanned_products", "meal_logs", "user_profiles", "SavedChatMessage", "SavedDailyPlan"
+        )
+
         /**
          * v9 -> v10: meal_logs gains isEstimated + a date index; user_profiles gains missingFields.
          * Every schema change from here on needs a Migration: users' meal history and

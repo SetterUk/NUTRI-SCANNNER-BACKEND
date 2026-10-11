@@ -355,8 +355,11 @@ class NutritionEngine(
             }
         }
         
-        val topThree = gaps.sortedByDescending { it.gap }.take(3)
-        val actionable = gaps.maxByOrNull { it.gap }
+        // Rank by how far behind each nutrient is, not by raw amount: the units differ (a 1,800 kcal
+        // gap always "beat" a 40 g protein gap). Calories are a budget, not something to chase.
+        val behind = gaps.filter { it.nutrient != "Calories" && it.gap > 0f }.sortedBy { it.percentageOfTarget }
+        val topThree = behind.take(3)
+        val actionable = behind.firstOrNull()
         
         return GapAnalysis(
             gaps = gaps,
@@ -394,42 +397,6 @@ class NutritionEngine(
             vitaminD = meals.sumOf { it.vitaminD.toDouble() }.toFloat(),
             folate = meals.sumOf { it.folate.toDouble() }.toFloat()
         )
-    }
-
-    fun calculatePersonalScore(
-        baseScore: Int,
-        productIngredients: String?,
-        productCategory: String?
-    ): Int {
-        var personalScore = baseScore
-
-        // 1. Dietary Preference Check
-        val diet = userProfile.dietType.lowercase()
-        val isVegetarian = diet in setOf("vegetarian", "vegan", "jain", "eggitarian")
-        if (isVegetarian && productIngredients?.contains("meat", ignoreCase = true) == true) {
-            personalScore -= 50
-        }
-        
-        if (diet == "vegan") {
-            val nonVegan = listOf("milk", "dairy", "honey", "egg", "meat")
-            if (nonVegan.any { productIngredients?.contains(it, ignoreCase = true) == true }) {
-                personalScore -= 50
-            }
-        }
-
-        // 2. Allergy Check
-        userProfile.allergies.forEach { allergy ->
-            if (productIngredients?.contains(allergy, ignoreCase = true) == true) {
-                personalScore -= 60 // Huge penalty for allergen
-            }
-        }
-
-        // 3. Goal Compatibility (Heuristic)
-        if (userProfile.primaryGoal == "weight_loss" && productCategory?.contains("snack", ignoreCase = true) == true) {
-            personalScore -= 10
-        }
-
-        return personalScore.coerceIn(0, 100)
     }
 
     suspend fun getChatHistory(): List<com.example.healthheatv2.data.SavedChatMessage> {

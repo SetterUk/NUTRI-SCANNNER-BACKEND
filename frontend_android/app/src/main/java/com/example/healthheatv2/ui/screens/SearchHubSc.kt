@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.healthheatv2.data.ProductCacheEntity
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.ui.components.UserProfileAvatar
+import com.example.healthheatv2.ui.components.ScoreTier
+import com.example.healthheatv2.ui.components.color
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
 import com.example.healthheatv2.ui.viewmodel.ScannerViewModel
@@ -410,9 +412,8 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
     val colors = LocalAppColors.current
     val product = item.foodResponse
     val score = product.healthScore ?: 0
-    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
-    val isSmash = score >= smashThreshold
-    val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
+    val tier = ScoreTier.of(product.verdict, product.healthScore)
+    val verdictColor = tier?.color() ?: colors.textSecondary
     val nutriScore = product.nutriScore?.uppercase() ?: "?"
     val nutriColor = nutriScoreColor(nutriScore, colors)
 
@@ -492,7 +493,7 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            if (isSmash) "SMASH ✓" else "PASS ✗",
+                            (tier?.label ?: "Not rated").uppercase(),
                             color = verdictColor,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,

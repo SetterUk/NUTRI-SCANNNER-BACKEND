@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, computed_field, field_validator
 from typing import List, Optional
+from datetime import datetime
 from enum import Enum
 
 class IngredientStatus(str, Enum):
@@ -113,6 +114,8 @@ class ProductResponse(AIAnalysisResult):
     alternatives: List[AlternativeProduct] = []
     # Allergy/diet conflicts for the signed-in user; when present the verdict is AVOID.
     personal_alerts: List[str] = []
+    # History rows only: when this user last scanned the product
+    scanned_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
