@@ -447,4 +447,4 @@ private fun HistoryItemCard(
 }
 
 private fun formatDate(timestamp: Long): String =
-    SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))
+    if (timestamp <= 0L) "" else SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))

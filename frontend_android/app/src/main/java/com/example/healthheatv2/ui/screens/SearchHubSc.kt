@@ -559,4 +559,4 @@ fun nutriScoreColor(score: String, colors: com.example.healthheatv2.ui.theme.App
 }
 
 private fun formatDate(timestamp: Long): String =
-    SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(timestamp))
+    if (timestamp <= 0L) "" else SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(timestamp))

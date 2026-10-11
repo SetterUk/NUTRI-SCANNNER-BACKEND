@@ -19,8 +19,13 @@ already in the repo are listed at the end for reference.
       `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
       If the server was running on the old built-in key, every existing login token becomes
       invalid and users must sign in again. That is expected.
-- [ ] **Deploy the backend** before shipping the new app. `/api/chat` now requires login, and
-      the app needs `DELETE /api/account`.
+- [ ] **Deploy the backend** before shipping the new app. The app needs `/api/tracking/sync`
+      (meal and weight sync), `DELETE /api/account`, login on `/api/chat`, and the new scan fields
+      (verdict bands, score breakdown, alternatives, personal alerts). New tables and columns are
+      created automatically on startup (`init_db`).
+- [ ] After deploying, scan two or three products you know and check the verdicts look right.
+      Products cached before this release are re-fetched from Open Food Facts and re-analysed on
+      their next scan (analysis version 3), so the first scan of each is a little slower.
 - [ ] **Hosting that doesn't sleep.** Render's free tier sleeps after ~15 minutes idle, so the
       first scan after a quiet period waits 30-60 s for the server to boot. This is the biggest
       cause of "scanning is slow". Options: a paid always-on instance, or another host with an
@@ -52,19 +57,17 @@ already in the repo are listed at the end for reference.
 - [ ] **Closed testing first.** New *personal* developer accounts must run a closed test with
       at least 12 opted-in testers for 14 consecutive days before production access is granted.
       Start this as early as possible. It is the longest step.
-- [ ] **Privacy policy URL** (mandatory, and especially for health data). It must cover: Google
-      sign-in (name, email), profile data (age, sex, height, weight, diet, allergies, health
-      conditions, medical notes), meal logs, chat messages sent to the AI provider (Groq),
-      crash reporting (Firebase Crashlytics and Sentry), camera use, microphone use for voice
-      input, how long data is kept, and how to delete it. Host it on a public page (GitHub Pages
-      works).
-- [ ] **Account deletion web link.** The in-app "Delete account and data" button is done
-      (Profile screen). Play also requires a web page where users can request deletion without
-      the app (a simple form or email address works).
-- [ ] **Data safety form.** Declare: personal info (name, email), health and fitness info,
-      app activity, app info and performance (crash logs), photos (product contributions), audio
-      (if voice input leaves the device). State data is encrypted in transit and users can request
-      deletion.
+- [ ] **Privacy policy URL.** A draft is in `docs/privacy-policy.html`. Replace `[DEVELOPER NAME]`
+      and `[CONTACT EMAIL]`, read it against the app once more, then publish the `docs/` folder with
+      GitHub Pages (repo Settings → Pages → branch `main`, folder `/docs`).
+- [ ] **Account deletion web link.** Draft in `docs/delete-account.html` (replace `[CONTACT EMAIL]`).
+      The in-app "Delete account and data" button already exists (Profile screen).
+- [ ] **Data safety form.** Declare: personal info (name, email), health and fitness info
+      (profile, conditions, meal logs and weight, all stored on our server), app activity
+      (scan history), app info and performance (Crashlytics, Firebase Analytics), photos (product
+      contributions only). Voice input is converted to text by the phone's speech service; we
+      never receive audio. Data is encrypted in transit; users can delete their account in the app
+      or via the web page. Chat messages and profile context are sent to Groq for processing.
 - [ ] **Health apps declaration.** Declare the app as nutrition/wellness, not a medical device.
       Show a short disclaimer in the app ("General nutrition information, not medical advice").
 - [ ] **Target audience: 18+** (or 16+). Avoid the Families programme with health data.
@@ -75,19 +78,40 @@ already in the repo are listed at the end for reference.
 
 ## 5. Known gaps to fix before or soon after launch
 
-- **Meal logs and chat are device-only and not tied to the account.** If a different person signs
-  in on the same phone they see the previous user's logs, and reinstalling loses everything.
-  Next step: sync meal logs to the backend per user.
-- **Two crash reporters** (Crashlytics and Sentry). Keep one; both must be declared in Data safety.
-- **Room is on an alpha version** (`2.7.0-alpha13`). Move to a stable release.
+- **NutriBot chat history stays on the phone** (meal and weight logs now sync to the account).
+- **Backend Sentry** still runs on the server (`SENTRY_DSN`). Request errors can include personal
+  data; keep `send_default_pii` off and mention server error monitoring in the privacy policy if
+  you keep it. The app itself now only uses Crashlytics.
+- **Alternatives depend on Open Food Facts data for India**, which is thin for some categories
+  (biscuits often have no clearly healthier option). The section is hidden when there is nothing
+  better, rather than suggesting something that isn't.
 - **On-device Gemma** truncates prompts to 1500 characters, which cuts off the rules section.
   Cloud mode (the default) is not affected.
 - **Food database values for the 72 added dishes are approximations.** Cross-check against the
   Indian Nutrient Databank (INDB) / IFCT 2017 and expand from there.
-- **Test the release build on a real phone** end to end: sign in, onboarding, scan, NutriBot,
-  log food by chat and by the dashboard box, delete a meal, delete account.
+- **Test the release build on a real phone** end to end, ideally after installing the previous
+  version first so the database migration (v10 → v11) runs on real data: sign in, onboarding,
+  Home "Today" card, log food by typing on Home and by chat, delete a meal, log a weight, scan a
+  product and tap a healthier pick, check an allergy alert (add "Peanuts" to allergies and scan a
+  peanut snack), turn the evening reminder on, reinstall and confirm meals come back, delete account.
 
 ## Already fixed in code (this release)
+
+- Scores: products were scored against the wrong food group (only the broadest OFF category was
+  kept, so most namkeen used whole-food limits); one five-band verdict that agrees with the
+  suggested frequency; plain "why this score" reasons; deterministic explanation when the AI is
+  down; allergen matching fixed ("til" matched "lentil"); several scoring bugs (serving-size
+  bonus inflation, nut discount on cashew biscuits, glycemic load per 100 g).
+- Allergy and diet checks per user on the server (the phone used substring matching that missed
+  "Dairy" vs "milk"), applied to verdicts and to healthier picks.
+- Scans were never actually personalised: the LangGraph state dropped the user profile.
+- Healthier picks: same-category products sold in India, re-scored with our engine.
+- Scan cache expires, is cleared on profile or account change, and never stores failed analyses.
+- Home is a daily "Today" screen with targets, logging, a next step, a weekly view and weight.
+- Meal and weight logs sync to the account (Room v11 migration); different accounts on one phone
+  no longer see each other's data.
+- Opt-in evening reminder; protein targets aligned with ICMR-NIN 2020.
+- One crash reporter (Crashlytics); Room 2.7.2 stable.
 
 - Profile answers now actually drive targets: gender, activity level and goal were stored in a
   different vocabulary than the calculators expected, so everyone got "moderate" activity and
