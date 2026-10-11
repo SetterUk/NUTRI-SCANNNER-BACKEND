@@ -138,6 +138,10 @@ interface ApiService {
 
     @POST("/api/chat")
     suspend fun chat(@Body request: ChatRequest): ChatResponse
+
+    /** Permanently deletes the account and all server-side data (required by Google Play). */
+    @retrofit2.http.DELETE("/api/account")
+    suspend fun deleteAccount(): Map<String, String>
 }
 
 // 3. Create the Retrofit Singleton

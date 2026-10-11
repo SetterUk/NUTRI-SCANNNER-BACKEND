@@ -35,7 +35,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
-    private val _userProfile = MutableStateFlow<UserProfileResponse?>(null)
+    // Seeded from the on-device copy so screens get the user's real profile immediately,
+    // even when the backend is cold-starting or the phone is offline.
+    private val _userProfile = MutableStateFlow<UserProfileResponse?>(loadCachedProfile())
     val userProfile: StateFlow<UserProfileResponse?> = _userProfile.asStateFlow()
 
     init {
@@ -48,8 +50,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             fetchProfile()
         } else {
             auth?.signOut()
-            prefs.edit().remove("backend_token").apply()
+            prefs.edit().remove("backend_token").remove(KEY_CACHED_PROFILE).apply()
             RetrofitClient.authToken = null
+            _userProfile.value = null
         }
     }
 
@@ -91,16 +94,40 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOut() {
         auth?.signOut()
-        prefs.edit().remove("backend_token").apply()
+        prefs.edit().remove("backend_token").remove(KEY_CACHED_PROFILE).apply()
         RetrofitClient.authToken = null
         _userProfile.value = null
         _authState.value = AuthState.Idle
     }
 
+    /**
+     * Deletes the account on the server, then wipes everything stored on this device
+     * (meal logs, chat history, scan cache, cached profile) and signs out.
+     */
+    suspend fun deleteAccount(): Result<Unit> = try {
+        RetrofitClient.apiService.deleteAccount()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val db = com.example.healthheatv2.data.UserDatabase.getDatabase(getApplication())
+            db.clearAllTables()
+            // clearAllTables also removed the bundled food database; re-import it for the next user.
+            getApplication<Application>().getSharedPreferences("food_seed", Context.MODE_PRIVATE).edit().clear().apply()
+            com.example.healthheatv2.data.FoodSeeder.invalidate()
+            com.example.healthheatv2.data.FoodSeeder.ensureSeeded(getApplication(), db.nutritionDao())
+        }
+        prefs.edit().clear().apply()
+        signOut()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        android.util.Log.e("AuthViewModel", "Account deletion failed", e)
+        Result.failure(e)
+    }
+
     fun fetchProfile() {
         viewModelScope.launch {
             try {
-                _userProfile.value = RetrofitClient.apiService.getProfile()
+                val profile = RetrofitClient.apiService.getProfile()
+                _userProfile.value = profile
+                prefs.edit().putString(KEY_CACHED_PROFILE, gson.toJson(profile)).apply()
             } catch (e: Exception) {
                 android.util.Log.e("AuthViewModel", "Failed to fetch profile", e)
             }
@@ -112,4 +139,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun hasSeenOnboarding(): Boolean = prefs.getBoolean("onboarding_seen", false)
 
     fun markOnboardingSeen() = prefs.edit().putBoolean("onboarding_seen", true).apply()
+
+    private fun loadCachedProfile(): UserProfileResponse? = try {
+        prefs.getString(KEY_CACHED_PROFILE, null)?.let { gson.fromJson(it, UserProfileResponse::class.java) }
+    } catch (e: Exception) {
+        null
+    }
+
+    private companion object {
+        const val KEY_CACHED_PROFILE = "cached_profile_json"
+        val gson = com.google.gson.Gson()
+    }
 }

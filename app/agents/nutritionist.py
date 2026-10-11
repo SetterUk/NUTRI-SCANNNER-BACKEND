@@ -143,8 +143,9 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema:
                         {
                             "role": "system",
                             "content": (
-                                "You are a clinical nutritionist AI. You explain pre-computed nutrition scores "
-                                "in plain, accurate language. You only output valid JSON. "
+                                "You are an expert culinary nutrition and dietary intelligence AI. "
+                                "You explain pre-computed food quality scores, additives, and ingredients in plain, clear language. "
+                                "You only output valid JSON. You provide practical food insights and ingredient clarity for the user's dietary profile. "
                                 "You never recompute or override the locked numeric scores provided to you."
                             )
                         },

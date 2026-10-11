@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "foods": [
     {
       "id": "dal_masoor_cooked",
@@ -334,7 +335,9 @@
       ],
       "aliases": [
         "dahi",
-        "yogurt"
+        "yogurt",
+        "curd",
+        "yoghurt"
       ]
     },
     {
@@ -392,7 +395,9 @@
         "snack"
       ],
       "aliases": [
-        "gai ka doodh"
+        "gai ka doodh",
+        "milk",
+        "doodh"
       ]
     },
     {
@@ -632,7 +637,10 @@
       ],
       "aliases": [
         "phulka",
-        "chapati"
+        "chapati",
+        "roti",
+        "rotis",
+        "fulka"
       ]
     },
     {
@@ -662,7 +670,10 @@
       ],
       "aliases": [
         "chawal",
-        "safed chawal"
+        "safed chawal",
+        "rice",
+        "plain rice",
+        "steamed rice"
       ]
     },
     {
@@ -2013,6 +2024,2156 @@
       ],
       "aliases": [
         "namak"
+      ]
+    },
+    {
+      "id": "idli",
+      "name": "Idli",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 40,
+      "macros": {
+        "calories": 58,
+        "protein": 2.0,
+        "carbs": 12.0,
+        "fat": 0.2,
+        "fiber": 0.6
+      },
+      "micros": {
+        "iron_mg": 0.3,
+        "calcium_mg": 6,
+        "zinc_mg": 0.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 6
+      },
+      "meal_suitability": [
+        "breakfast",
+        "dinner"
+      ],
+      "aliases": [
+        "idly",
+        "idli sambar"
+      ]
+    },
+    {
+      "id": "dosa_plain",
+      "name": "Plain Dosa",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 80,
+      "macros": {
+        "calories": 168,
+        "protein": 3.9,
+        "carbs": 29.0,
+        "fat": 3.7,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 0.8,
+        "calcium_mg": 10,
+        "zinc_mg": 0.4,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "breakfast",
+        "dinner"
+      ],
+      "aliases": [
+        "dosa",
+        "dosai",
+        "sada dosa"
+      ]
+    },
+    {
+      "id": "dosa_masala",
+      "name": "Masala Dosa",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 260,
+        "protein": 5.5,
+        "carbs": 38.0,
+        "fat": 9.5,
+        "fiber": 2.5
+      },
+      "micros": {
+        "iron_mg": 1.2,
+        "calcium_mg": 20,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "breakfast",
+        "lunch",
+        "dinner"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "uttapam",
+      "name": "Uttapam",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 120,
+      "macros": {
+        "calories": 200,
+        "protein": 5.0,
+        "carbs": 32.0,
+        "fat": 5.5,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 1.0,
+        "calcium_mg": 20,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 12
+      },
+      "meal_suitability": [
+        "breakfast",
+        "dinner"
+      ],
+      "aliases": [
+        "uthappam"
+      ]
+    },
+    {
+      "id": "medu_vada",
+      "name": "Medu Vada",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 50,
+      "macros": {
+        "calories": 150,
+        "protein": 4.5,
+        "carbs": 14.0,
+        "fat": 8.5,
+        "fiber": 1.5
+      },
+      "micros": {
+        "iron_mg": 0.9,
+        "calcium_mg": 15,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "vada",
+        "vadai",
+        "urad vada"
+      ]
+    },
+    {
+      "id": "sambar",
+      "name": "Sambar",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 110,
+        "protein": 5.0,
+        "carbs": 15.0,
+        "fat": 3.2,
+        "fiber": 3.5
+      },
+      "micros": {
+        "iron_mg": 1.3,
+        "calcium_mg": 40,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 35
+      },
+      "meal_suitability": [
+        "breakfast",
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "sambhar"
+      ]
+    },
+    {
+      "id": "coconut_chutney",
+      "name": "Coconut Chutney",
+      "category": "Condiments",
+      "veg": true,
+      "serving_size_g": 30,
+      "macros": {
+        "calories": 70,
+        "protein": 0.8,
+        "carbs": 2.5,
+        "fat": 6.5,
+        "fiber": 1.5
+      },
+      "micros": {
+        "iron_mg": 0.3,
+        "calcium_mg": 5,
+        "zinc_mg": 0.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 4
+      },
+      "meal_suitability": [
+        "breakfast"
+      ],
+      "aliases": [
+        "chutney",
+        "nariyal chutney"
+      ]
+    },
+    {
+      "id": "poha_cooked",
+      "name": "Poha (cooked)",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 250,
+        "protein": 4.5,
+        "carbs": 40.0,
+        "fat": 8.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 2.5,
+        "calcium_mg": 15,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "poha",
+        "kanda poha",
+        "pohe"
+      ]
+    },
+    {
+      "id": "pongal",
+      "name": "Ven Pongal",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 200,
+      "macros": {
+        "calories": 280,
+        "protein": 7.5,
+        "carbs": 42.0,
+        "fat": 9.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 1.2,
+        "calcium_mg": 25,
+        "zinc_mg": 0.9,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 25
+      },
+      "meal_suitability": [
+        "breakfast"
+      ],
+      "aliases": [
+        "pongal"
+      ]
+    },
+    {
+      "id": "paratha_aloo",
+      "name": "Aloo Paratha",
+      "category": "Breads",
+      "veg": true,
+      "serving_size_g": 120,
+      "macros": {
+        "calories": 290,
+        "protein": 6.0,
+        "carbs": 40.0,
+        "fat": 11.0,
+        "fiber": 3.5
+      },
+      "micros": {
+        "iron_mg": 1.6,
+        "calcium_mg": 30,
+        "zinc_mg": 0.9,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "breakfast",
+        "lunch"
+      ],
+      "aliases": [
+        "aloo parantha",
+        "potato paratha"
+      ]
+    },
+    {
+      "id": "paratha_plain",
+      "name": "Plain Paratha",
+      "category": "Breads",
+      "veg": true,
+      "serving_size_g": 60,
+      "macros": {
+        "calories": 180,
+        "protein": 4.0,
+        "carbs": 25.0,
+        "fat": 7.0,
+        "fiber": 2.5
+      },
+      "micros": {
+        "iron_mg": 1.2,
+        "calcium_mg": 15,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "breakfast",
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "paratha",
+        "parantha",
+        "lachha paratha"
+      ]
+    },
+    {
+      "id": "thepla",
+      "name": "Methi Thepla",
+      "category": "Breads",
+      "veg": true,
+      "serving_size_g": 40,
+      "macros": {
+        "calories": 120,
+        "protein": 3.0,
+        "carbs": 16.0,
+        "fat": 5.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 1.2,
+        "calcium_mg": 30,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "thepla"
+      ]
+    },
+    {
+      "id": "puri",
+      "name": "Puri",
+      "category": "Breads",
+      "veg": true,
+      "serving_size_g": 25,
+      "macros": {
+        "calories": 100,
+        "protein": 1.8,
+        "carbs": 11.0,
+        "fat": 5.5,
+        "fiber": 0.8
+      },
+      "micros": {
+        "iron_mg": 0.5,
+        "calcium_mg": 6,
+        "zinc_mg": 0.3,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 4
+      },
+      "meal_suitability": [
+        "breakfast"
+      ],
+      "aliases": [
+        "poori"
+      ]
+    },
+    {
+      "id": "naan",
+      "name": "Naan",
+      "category": "Breads",
+      "veg": true,
+      "serving_size_g": 90,
+      "macros": {
+        "calories": 260,
+        "protein": 8.5,
+        "carbs": 45.0,
+        "fat": 5.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 1.5,
+        "calcium_mg": 40,
+        "zinc_mg": 0.7,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 30
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "butter naan",
+        "nan"
+      ]
+    },
+    {
+      "id": "bread_white",
+      "name": "White Bread (slice)",
+      "category": "Breads",
+      "veg": true,
+      "serving_size_g": 25,
+      "macros": {
+        "calories": 67,
+        "protein": 2.2,
+        "carbs": 12.5,
+        "fat": 0.8,
+        "fiber": 0.6
+      },
+      "micros": {
+        "iron_mg": 0.9,
+        "calcium_mg": 35,
+        "zinc_mg": 0.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 25
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "bread",
+        "white bread",
+        "toast"
+      ]
+    },
+    {
+      "id": "bread_brown",
+      "name": "Brown Bread (slice)",
+      "category": "Breads",
+      "veg": true,
+      "serving_size_g": 25,
+      "macros": {
+        "calories": 62,
+        "protein": 2.6,
+        "carbs": 11.0,
+        "fat": 0.9,
+        "fiber": 1.7
+      },
+      "micros": {
+        "iron_mg": 0.8,
+        "calcium_mg": 30,
+        "zinc_mg": 0.4,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 12
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "whole wheat bread",
+        "atta bread"
+      ]
+    },
+    {
+      "id": "besan_chilla",
+      "name": "Besan Chilla",
+      "category": "Breakfast",
+      "veg": true,
+      "serving_size_g": 70,
+      "macros": {
+        "calories": 140,
+        "protein": 7.0,
+        "carbs": 15.0,
+        "fat": 6.0,
+        "fiber": 3.0
+      },
+      "micros": {
+        "iron_mg": 1.5,
+        "calcium_mg": 25,
+        "zinc_mg": 0.9,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 50
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "chilla",
+        "cheela",
+        "chila"
+      ]
+    },
+    {
+      "id": "dhokla",
+      "name": "Dhokla",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 80,
+      "macros": {
+        "calories": 130,
+        "protein": 5.0,
+        "carbs": 20.0,
+        "fat": 3.5,
+        "fiber": 1.5
+      },
+      "micros": {
+        "iron_mg": 1.0,
+        "calcium_mg": 30,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 30
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "khaman",
+        "khaman dhokla"
+      ]
+    },
+    {
+      "id": "omelette",
+      "name": "Omelette (2 eggs)",
+      "category": "Protein",
+      "veg": false,
+      "serving_size_g": 110,
+      "macros": {
+        "calories": 190,
+        "protein": 13.0,
+        "carbs": 2.0,
+        "fat": 14.5,
+        "fiber": 0.3
+      },
+      "micros": {
+        "iron_mg": 1.8,
+        "calcium_mg": 60,
+        "zinc_mg": 1.3,
+        "b12_mcg": 1.0,
+        "vitamin_d_iu": 80,
+        "folate_mcg": 50
+      },
+      "meal_suitability": [
+        "breakfast",
+        "dinner"
+      ],
+      "aliases": [
+        "omlet",
+        "anda omelette",
+        "egg omelette"
+      ]
+    },
+    {
+      "id": "egg_bhurji",
+      "name": "Egg Bhurji (2 eggs)",
+      "category": "Protein",
+      "veg": false,
+      "serving_size_g": 120,
+      "macros": {
+        "calories": 200,
+        "protein": 13.0,
+        "carbs": 3.0,
+        "fat": 15.0,
+        "fiber": 0.5
+      },
+      "micros": {
+        "iron_mg": 1.9,
+        "calcium_mg": 60,
+        "zinc_mg": 1.3,
+        "b12_mcg": 1.0,
+        "vitamin_d_iu": 80,
+        "folate_mcg": 50
+      },
+      "meal_suitability": [
+        "breakfast",
+        "dinner"
+      ],
+      "aliases": [
+        "anda bhurji",
+        "scrambled egg"
+      ]
+    },
+    {
+      "id": "dal_tadka",
+      "name": "Dal Tadka",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 150,
+        "protein": 7.5,
+        "carbs": 18.0,
+        "fat": 5.0,
+        "fiber": 4.0
+      },
+      "micros": {
+        "iron_mg": 2.0,
+        "calcium_mg": 30,
+        "zinc_mg": 0.9,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 60
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "dal",
+        "daal",
+        "dal fry",
+        "toor dal",
+        "arhar dal",
+        "yellow dal"
+      ]
+    },
+    {
+      "id": "dal_makhani",
+      "name": "Dal Makhani",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 230,
+        "protein": 8.5,
+        "carbs": 20.0,
+        "fat": 13.0,
+        "fiber": 5.0
+      },
+      "micros": {
+        "iron_mg": 2.2,
+        "calcium_mg": 70,
+        "zinc_mg": 1.1,
+        "b12_mcg": 0.1,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 55
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "maa ki dal"
+      ]
+    },
+    {
+      "id": "chole",
+      "name": "Chole (Chana Masala)",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 210,
+        "protein": 8.5,
+        "carbs": 27.0,
+        "fat": 7.5,
+        "fiber": 7.0
+      },
+      "micros": {
+        "iron_mg": 2.6,
+        "calcium_mg": 55,
+        "zinc_mg": 1.3,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 110
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "chole",
+        "chana masala",
+        "chickpea curry"
+      ]
+    },
+    {
+      "id": "rajma_masala",
+      "name": "Rajma Masala",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 190,
+        "protein": 8.5,
+        "carbs": 25.0,
+        "fat": 6.0,
+        "fiber": 7.0
+      },
+      "micros": {
+        "iron_mg": 2.4,
+        "calcium_mg": 50,
+        "zinc_mg": 1.1,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 100
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "rajma curry",
+        "rajma chawal"
+      ]
+    },
+    {
+      "id": "kadhi",
+      "name": "Kadhi",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 150,
+        "protein": 5.0,
+        "carbs": 12.0,
+        "fat": 9.0,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 0.8,
+        "calcium_mg": 120,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0.2,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "kadhi pakora",
+        "kadi"
+      ]
+    },
+    {
+      "id": "paneer_butter_masala",
+      "name": "Paneer Butter Masala",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 340,
+        "protein": 12.0,
+        "carbs": 12.0,
+        "fat": 27.0,
+        "fiber": 1.5
+      },
+      "micros": {
+        "iron_mg": 0.8,
+        "calcium_mg": 250,
+        "zinc_mg": 1.4,
+        "b12_mcg": 0.3,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "paneer makhani",
+        "butter paneer",
+        "shahi paneer"
+      ]
+    },
+    {
+      "id": "palak_paneer",
+      "name": "Palak Paneer",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 250,
+        "protein": 12.0,
+        "carbs": 9.0,
+        "fat": 19.0,
+        "fiber": 3.0
+      },
+      "micros": {
+        "iron_mg": 2.8,
+        "calcium_mg": 300,
+        "zinc_mg": 1.5,
+        "b12_mcg": 0.3,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 90
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "saag paneer"
+      ]
+    },
+    {
+      "id": "matar_paneer",
+      "name": "Matar Paneer",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 240,
+        "protein": 11.0,
+        "carbs": 13.0,
+        "fat": 16.0,
+        "fiber": 3.5
+      },
+      "micros": {
+        "iron_mg": 1.4,
+        "calcium_mg": 220,
+        "zinc_mg": 1.4,
+        "b12_mcg": 0.3,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 40
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "mutter paneer"
+      ]
+    },
+    {
+      "id": "paneer_bhurji",
+      "name": "Paneer Bhurji",
+      "category": "Protein",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 300,
+        "protein": 18.0,
+        "carbs": 7.0,
+        "fat": 22.5,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 0.6,
+        "calcium_mg": 300,
+        "zinc_mg": 1.8,
+        "b12_mcg": 0.4,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "breakfast",
+        "lunch",
+        "dinner"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "mixed_veg",
+      "name": "Mixed Veg Curry",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 130,
+        "protein": 3.0,
+        "carbs": 13.0,
+        "fat": 7.5,
+        "fiber": 4.0
+      },
+      "micros": {
+        "iron_mg": 1.0,
+        "calcium_mg": 40,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 30
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "mix veg",
+        "sabzi",
+        "sabji",
+        "vegetable curry"
+      ]
+    },
+    {
+      "id": "aloo_sabzi",
+      "name": "Aloo Sabzi",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 165,
+        "protein": 2.5,
+        "carbs": 22.0,
+        "fat": 7.5,
+        "fiber": 2.8
+      },
+      "micros": {
+        "iron_mg": 0.8,
+        "calcium_mg": 15,
+        "zinc_mg": 0.4,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "breakfast",
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "aloo bhaji",
+        "potato curry",
+        "aloo ki sabzi"
+      ]
+    },
+    {
+      "id": "bhindi_masala",
+      "name": "Bhindi Masala",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 140,
+        "protein": 3.0,
+        "carbs": 12.0,
+        "fat": 9.0,
+        "fiber": 4.5
+      },
+      "micros": {
+        "iron_mg": 0.9,
+        "calcium_mg": 110,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 70
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "bhindi fry"
+      ]
+    },
+    {
+      "id": "baingan_bharta",
+      "name": "Baingan Bharta",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 120,
+        "protein": 2.5,
+        "carbs": 11.0,
+        "fat": 7.5,
+        "fiber": 4.5
+      },
+      "micros": {
+        "iron_mg": 0.6,
+        "calcium_mg": 20,
+        "zinc_mg": 0.3,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 25
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "bharta"
+      ]
+    },
+    {
+      "id": "jeera_rice",
+      "name": "Jeera Rice",
+      "category": "Rice Dishes",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 220,
+        "protein": 3.8,
+        "carbs": 40.0,
+        "fat": 5.0,
+        "fiber": 0.8
+      },
+      "micros": {
+        "iron_mg": 0.5,
+        "calcium_mg": 12,
+        "zinc_mg": 0.7,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 5
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "veg_pulao",
+      "name": "Veg Pulao",
+      "category": "Rice Dishes",
+      "veg": true,
+      "serving_size_g": 200,
+      "macros": {
+        "calories": 290,
+        "protein": 6.0,
+        "carbs": 48.0,
+        "fat": 8.0,
+        "fiber": 3.0
+      },
+      "micros": {
+        "iron_mg": 1.0,
+        "calcium_mg": 30,
+        "zinc_mg": 1.0,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "pulao",
+        "pulav"
+      ]
+    },
+    {
+      "id": "veg_biryani",
+      "name": "Veg Biryani",
+      "category": "Rice Dishes",
+      "veg": true,
+      "serving_size_g": 250,
+      "macros": {
+        "calories": 380,
+        "protein": 8.5,
+        "carbs": 58.0,
+        "fat": 12.5,
+        "fiber": 4.0
+      },
+      "micros": {
+        "iron_mg": 1.5,
+        "calcium_mg": 50,
+        "zinc_mg": 1.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 25
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "chicken_biryani",
+      "name": "Chicken Biryani",
+      "category": "Rice Dishes",
+      "veg": false,
+      "serving_size_g": 250,
+      "macros": {
+        "calories": 450,
+        "protein": 22.0,
+        "carbs": 52.0,
+        "fat": 16.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 1.8,
+        "calcium_mg": 50,
+        "zinc_mg": 2.2,
+        "b12_mcg": 0.4,
+        "vitamin_d_iu": 5,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "murgh biryani"
+      ]
+    },
+    {
+      "id": "khichdi",
+      "name": "Khichdi",
+      "category": "Rice Dishes",
+      "veg": true,
+      "serving_size_g": 200,
+      "macros": {
+        "calories": 240,
+        "protein": 8.5,
+        "carbs": 40.0,
+        "fat": 5.0,
+        "fiber": 4.0
+      },
+      "micros": {
+        "iron_mg": 1.8,
+        "calcium_mg": 30,
+        "zinc_mg": 1.1,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 45
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "khichri",
+        "khichadi"
+      ]
+    },
+    {
+      "id": "curd_rice",
+      "name": "Curd Rice",
+      "category": "Rice Dishes",
+      "veg": true,
+      "serving_size_g": 200,
+      "macros": {
+        "calories": 260,
+        "protein": 7.0,
+        "carbs": 40.0,
+        "fat": 7.5,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 0.4,
+        "calcium_mg": 150,
+        "zinc_mg": 0.9,
+        "b12_mcg": 0.3,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "dahi chawal",
+        "thayir sadam"
+      ]
+    },
+    {
+      "id": "lemon_rice",
+      "name": "Lemon Rice",
+      "category": "Rice Dishes",
+      "veg": true,
+      "serving_size_g": 200,
+      "macros": {
+        "calories": 300,
+        "protein": 5.0,
+        "carbs": 50.0,
+        "fat": 9.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 0.8,
+        "calcium_mg": 15,
+        "zinc_mg": 0.8,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 8
+      },
+      "meal_suitability": [
+        "lunch"
+      ],
+      "aliases": [
+        "chitranna"
+      ]
+    },
+    {
+      "id": "rasam",
+      "name": "Rasam",
+      "category": "Curries",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 50,
+        "protein": 1.5,
+        "carbs": 7.0,
+        "fat": 2.0,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 0.6,
+        "calcium_mg": 15,
+        "zinc_mg": 0.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 12
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "saaru"
+      ]
+    },
+    {
+      "id": "raita",
+      "name": "Raita",
+      "category": "Dairy",
+      "veg": true,
+      "serving_size_g": 100,
+      "macros": {
+        "calories": 70,
+        "protein": 3.5,
+        "carbs": 5.0,
+        "fat": 4.0,
+        "fiber": 0.5
+      },
+      "micros": {
+        "iron_mg": 0.2,
+        "calcium_mg": 120,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0.2,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 8
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "boondi raita",
+        "cucumber raita"
+      ]
+    },
+    {
+      "id": "green_salad",
+      "name": "Green Salad",
+      "category": "Vegetables",
+      "veg": true,
+      "serving_size_g": 100,
+      "macros": {
+        "calories": 25,
+        "protein": 1.0,
+        "carbs": 5.0,
+        "fat": 0.2,
+        "fiber": 1.8
+      },
+      "micros": {
+        "iron_mg": 0.5,
+        "calcium_mg": 20,
+        "zinc_mg": 0.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 25
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "salad",
+        "kachumber"
+      ]
+    },
+    {
+      "id": "chicken_curry",
+      "name": "Chicken Curry",
+      "category": "Curries",
+      "veg": false,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 240,
+        "protein": 21.0,
+        "carbs": 6.0,
+        "fat": 15.0,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 1.3,
+        "calcium_mg": 25,
+        "zinc_mg": 1.8,
+        "b12_mcg": 0.4,
+        "vitamin_d_iu": 5,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "chicken masala",
+        "murgh curry"
+      ]
+    },
+    {
+      "id": "butter_chicken",
+      "name": "Butter Chicken",
+      "category": "Curries",
+      "veg": false,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 330,
+        "protein": 20.0,
+        "carbs": 9.0,
+        "fat": 24.0,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 1.2,
+        "calcium_mg": 60,
+        "zinc_mg": 1.7,
+        "b12_mcg": 0.4,
+        "vitamin_d_iu": 10,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "murgh makhani"
+      ]
+    },
+    {
+      "id": "fish_curry",
+      "name": "Fish Curry",
+      "category": "Curries",
+      "veg": false,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 200,
+        "protein": 19.0,
+        "carbs": 5.0,
+        "fat": 11.5,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 1.0,
+        "calcium_mg": 40,
+        "zinc_mg": 0.8,
+        "b12_mcg": 1.8,
+        "vitamin_d_iu": 200,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "machli curry",
+        "macher jhol",
+        "meen curry"
+      ]
+    },
+    {
+      "id": "egg_curry",
+      "name": "Egg Curry (2 eggs)",
+      "category": "Curries",
+      "veg": false,
+      "serving_size_g": 200,
+      "macros": {
+        "calories": 260,
+        "protein": 14.0,
+        "carbs": 8.0,
+        "fat": 19.0,
+        "fiber": 1.5
+      },
+      "micros": {
+        "iron_mg": 2.0,
+        "calcium_mg": 70,
+        "zinc_mg": 1.4,
+        "b12_mcg": 1.0,
+        "vitamin_d_iu": 80,
+        "folate_mcg": 55
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "anda curry"
+      ]
+    },
+    {
+      "id": "mutton_curry",
+      "name": "Mutton Curry",
+      "category": "Curries",
+      "veg": false,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 290,
+        "protein": 22.0,
+        "carbs": 5.0,
+        "fat": 20.0,
+        "fiber": 1.0
+      },
+      "micros": {
+        "iron_mg": 2.5,
+        "calcium_mg": 25,
+        "zinc_mg": 4.0,
+        "b12_mcg": 2.0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 8
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "gosht",
+        "mutton masala",
+        "rogan josh"
+      ]
+    },
+    {
+      "id": "samosa",
+      "name": "Samosa",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 70,
+      "macros": {
+        "calories": 260,
+        "protein": 3.5,
+        "carbs": 24.0,
+        "fat": 17.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 0.9,
+        "calcium_mg": 15,
+        "zinc_mg": 0.4,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "samosas"
+      ]
+    },
+    {
+      "id": "pakora",
+      "name": "Pakora",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 80,
+      "macros": {
+        "calories": 260,
+        "protein": 5.0,
+        "carbs": 20.0,
+        "fat": 18.0,
+        "fiber": 2.5
+      },
+      "micros": {
+        "iron_mg": 1.4,
+        "calcium_mg": 30,
+        "zinc_mg": 0.7,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 30
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "pakoda",
+        "bhajiya",
+        "bhaji",
+        "pakore"
+      ]
+    },
+    {
+      "id": "pav_bhaji",
+      "name": "Pav Bhaji",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 250,
+      "macros": {
+        "calories": 450,
+        "protein": 10.0,
+        "carbs": 60.0,
+        "fat": 19.0,
+        "fiber": 6.0
+      },
+      "micros": {
+        "iron_mg": 2.5,
+        "calcium_mg": 80,
+        "zinc_mg": 1.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 40
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner",
+        "snack"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "vada_pav",
+      "name": "Vada Pav",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 140,
+      "macros": {
+        "calories": 290,
+        "protein": 6.0,
+        "carbs": 40.0,
+        "fat": 12.0,
+        "fiber": 2.5
+      },
+      "micros": {
+        "iron_mg": 1.4,
+        "calcium_mg": 40,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "wada pav"
+      ]
+    },
+    {
+      "id": "bhel_puri",
+      "name": "Bhel Puri",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 100,
+      "macros": {
+        "calories": 200,
+        "protein": 4.5,
+        "carbs": 32.0,
+        "fat": 6.5,
+        "fiber": 2.5
+      },
+      "micros": {
+        "iron_mg": 1.5,
+        "calcium_mg": 20,
+        "zinc_mg": 0.6,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "bhel"
+      ]
+    },
+    {
+      "id": "pani_puri",
+      "name": "Pani Puri (6 pcs)",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 120,
+      "macros": {
+        "calories": 210,
+        "protein": 4.0,
+        "carbs": 34.0,
+        "fat": 7.0,
+        "fiber": 2.5
+      },
+      "micros": {
+        "iron_mg": 1.2,
+        "calcium_mg": 20,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 20
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "golgappa",
+        "puchka",
+        "gol gappe"
+      ]
+    },
+    {
+      "id": "instant_noodles",
+      "name": "Instant Noodles (1 pack)",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 70,
+      "macros": {
+        "calories": 310,
+        "protein": 7.0,
+        "carbs": 42.0,
+        "fat": 13.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 1.5,
+        "calcium_mg": 20,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 10
+      },
+      "meal_suitability": [
+        "snack",
+        "dinner"
+      ],
+      "aliases": [
+        "maggi",
+        "noodles",
+        "ramen"
+      ]
+    },
+    {
+      "id": "marie_biscuit",
+      "name": "Marie Biscuits (4 pcs)",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 28,
+      "macros": {
+        "calories": 125,
+        "protein": 2.0,
+        "carbs": 21.0,
+        "fat": 3.5,
+        "fiber": 0.5
+      },
+      "micros": {
+        "iron_mg": 0.5,
+        "calcium_mg": 20,
+        "zinc_mg": 0.2,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 3
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "biscuit",
+        "marie"
+      ]
+    },
+    {
+      "id": "makhana_roasted",
+      "name": "Roasted Makhana",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 30,
+      "macros": {
+        "calories": 120,
+        "protein": 3.0,
+        "carbs": 20.0,
+        "fat": 3.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 0.4,
+        "calcium_mg": 20,
+        "zinc_mg": 0.4,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 5
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "makhana",
+        "fox nuts",
+        "lotus seeds"
+      ]
+    },
+    {
+      "id": "chana_roasted",
+      "name": "Roasted Chana",
+      "category": "Snacks",
+      "veg": true,
+      "serving_size_g": 30,
+      "macros": {
+        "calories": 110,
+        "protein": 6.0,
+        "carbs": 17.0,
+        "fat": 1.6,
+        "fiber": 5.0
+      },
+      "micros": {
+        "iron_mg": 1.7,
+        "calcium_mg": 17,
+        "zinc_mg": 1.0,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 40
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "bhuna chana",
+        "roasted gram",
+        "phutana"
+      ]
+    },
+    {
+      "id": "masala_chai",
+      "name": "Masala Chai (with milk & sugar)",
+      "category": "Beverages",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 90,
+        "protein": 2.5,
+        "carbs": 13.0,
+        "fat": 3.0,
+        "fiber": 0.0
+      },
+      "micros": {
+        "iron_mg": 0.1,
+        "calcium_mg": 90,
+        "zinc_mg": 0.3,
+        "b12_mcg": 0.2,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 3
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "chai",
+        "tea",
+        "milk tea",
+        "cutting chai",
+        "adrak chai"
+      ]
+    },
+    {
+      "id": "coffee_milk",
+      "name": "Coffee (with milk & sugar)",
+      "category": "Beverages",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 85,
+        "protein": 2.5,
+        "carbs": 11.0,
+        "fat": 3.0,
+        "fiber": 0.0
+      },
+      "micros": {
+        "iron_mg": 0.1,
+        "calcium_mg": 90,
+        "zinc_mg": 0.3,
+        "b12_mcg": 0.2,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 3
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "coffee",
+        "filter coffee",
+        "cold coffee"
+      ]
+    },
+    {
+      "id": "coffee_black",
+      "name": "Black Coffee",
+      "category": "Beverages",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 2,
+        "protein": 0.2,
+        "carbs": 0.0,
+        "fat": 0.0,
+        "fiber": 0.0
+      },
+      "micros": {
+        "iron_mg": 0.0,
+        "calcium_mg": 3,
+        "zinc_mg": 0.0,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 3
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "americano",
+        "black tea"
+      ]
+    },
+    {
+      "id": "lassi_sweet",
+      "name": "Sweet Lassi",
+      "category": "Beverages",
+      "veg": true,
+      "serving_size_g": 250,
+      "macros": {
+        "calories": 220,
+        "protein": 7.0,
+        "carbs": 32.0,
+        "fat": 7.0,
+        "fiber": 0.0
+      },
+      "micros": {
+        "iron_mg": 0.2,
+        "calcium_mg": 230,
+        "zinc_mg": 1.0,
+        "b12_mcg": 0.5,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 12
+      },
+      "meal_suitability": [
+        "lunch",
+        "snack"
+      ],
+      "aliases": [
+        "lassi"
+      ]
+    },
+    {
+      "id": "buttermilk",
+      "name": "Buttermilk (Chaas)",
+      "category": "Beverages",
+      "veg": true,
+      "serving_size_g": 250,
+      "macros": {
+        "calories": 40,
+        "protein": 2.5,
+        "carbs": 4.0,
+        "fat": 1.3,
+        "fiber": 0.0
+      },
+      "micros": {
+        "iron_mg": 0.1,
+        "calcium_mg": 100,
+        "zinc_mg": 0.4,
+        "b12_mcg": 0.2,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 5
+      },
+      "meal_suitability": [
+        "lunch",
+        "snack"
+      ],
+      "aliases": [
+        "chaas",
+        "chhaas",
+        "mattha",
+        "majjige",
+        "neer mor"
+      ]
+    },
+    {
+      "id": "coconut_water",
+      "name": "Coconut Water",
+      "category": "Beverages",
+      "veg": true,
+      "serving_size_g": 250,
+      "macros": {
+        "calories": 48,
+        "protein": 1.8,
+        "carbs": 9.0,
+        "fat": 0.5,
+        "fiber": 2.8
+      },
+      "micros": {
+        "iron_mg": 0.7,
+        "calcium_mg": 60,
+        "zinc_mg": 0.3,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 7
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "nariyal pani",
+        "tender coconut"
+      ]
+    },
+    {
+      "id": "soft_drink",
+      "name": "Soft Drink (can)",
+      "category": "Beverages",
+      "veg": true,
+      "serving_size_g": 330,
+      "macros": {
+        "calories": 140,
+        "protein": 0.0,
+        "carbs": 35.0,
+        "fat": 0.0,
+        "fiber": 0.0
+      },
+      "micros": {
+        "iron_mg": 0.0,
+        "calcium_mg": 7,
+        "zinc_mg": 0.0,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 0
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "coke",
+        "pepsi",
+        "cola",
+        "cold drink",
+        "soda",
+        "thums up",
+        "sprite"
+      ]
+    },
+    {
+      "id": "gulab_jamun",
+      "name": "Gulab Jamun",
+      "category": "Sweets",
+      "veg": true,
+      "serving_size_g": 40,
+      "macros": {
+        "calories": 150,
+        "protein": 2.0,
+        "carbs": 22.0,
+        "fat": 6.0,
+        "fiber": 0.2
+      },
+      "micros": {
+        "iron_mg": 0.3,
+        "calcium_mg": 40,
+        "zinc_mg": 0.2,
+        "b12_mcg": 0.1,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 3
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "gulabjamun"
+      ]
+    },
+    {
+      "id": "kheer",
+      "name": "Kheer",
+      "category": "Sweets",
+      "veg": true,
+      "serving_size_g": 150,
+      "macros": {
+        "calories": 230,
+        "protein": 6.0,
+        "carbs": 34.0,
+        "fat": 7.5,
+        "fiber": 0.3
+      },
+      "micros": {
+        "iron_mg": 0.3,
+        "calcium_mg": 180,
+        "zinc_mg": 0.7,
+        "b12_mcg": 0.4,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 8
+      },
+      "meal_suitability": [
+        "snack",
+        "dinner"
+      ],
+      "aliases": [
+        "payasam",
+        "rice kheer",
+        "payesh"
+      ]
+    },
+    {
+      "id": "jalebi",
+      "name": "Jalebi (2 pcs)",
+      "category": "Sweets",
+      "veg": true,
+      "serving_size_g": 50,
+      "macros": {
+        "calories": 200,
+        "protein": 1.0,
+        "carbs": 32.0,
+        "fat": 8.0,
+        "fiber": 0.2
+      },
+      "micros": {
+        "iron_mg": 0.3,
+        "calcium_mg": 5,
+        "zinc_mg": 0.1,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 2
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "jilebi"
+      ]
+    },
+    {
+      "id": "besan_ladoo",
+      "name": "Besan Ladoo",
+      "category": "Sweets",
+      "veg": true,
+      "serving_size_g": 40,
+      "macros": {
+        "calories": 180,
+        "protein": 3.5,
+        "carbs": 20.0,
+        "fat": 10.0,
+        "fiber": 1.5
+      },
+      "micros": {
+        "iron_mg": 0.9,
+        "calcium_mg": 15,
+        "zinc_mg": 0.5,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "snack"
+      ],
+      "aliases": [
+        "ladoo",
+        "laddu",
+        "laddoo"
+      ]
+    },
+    {
+      "id": "whey_protein",
+      "name": "Whey Protein (1 scoop)",
+      "category": "Protein",
+      "veg": true,
+      "serving_size_g": 30,
+      "macros": {
+        "calories": 120,
+        "protein": 24.0,
+        "carbs": 3.0,
+        "fat": 1.5,
+        "fiber": 0.0
+      },
+      "micros": {
+        "iron_mg": 0.5,
+        "calcium_mg": 120,
+        "zinc_mg": 1.0,
+        "b12_mcg": 0.5,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 0
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "protein shake",
+        "whey",
+        "protein powder"
+      ]
+    },
+    {
+      "id": "tofu",
+      "name": "Tofu",
+      "category": "Protein",
+      "veg": true,
+      "serving_size_g": 100,
+      "macros": {
+        "calories": 76,
+        "protein": 8.1,
+        "carbs": 1.9,
+        "fat": 4.8,
+        "fiber": 0.3
+      },
+      "micros": {
+        "iron_mg": 5.4,
+        "calcium_mg": 350,
+        "zinc_mg": 0.8,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 15
+      },
+      "meal_suitability": [
+        "lunch",
+        "dinner"
+      ],
+      "aliases": [
+        "soy paneer"
+      ]
+    },
+    {
+      "id": "peanut_butter",
+      "name": "Peanut Butter (2 tbsp)",
+      "category": "Nuts & Seeds",
+      "veg": true,
+      "serving_size_g": 32,
+      "macros": {
+        "calories": 190,
+        "protein": 7.0,
+        "carbs": 7.0,
+        "fat": 16.0,
+        "fiber": 2.0
+      },
+      "micros": {
+        "iron_mg": 0.6,
+        "calcium_mg": 15,
+        "zinc_mg": 0.9,
+        "b12_mcg": 0,
+        "vitamin_d_iu": 0,
+        "folate_mcg": 24
+      },
+      "meal_suitability": [
+        "breakfast",
+        "snack"
+      ],
+      "aliases": [
+        "pb"
       ]
     }
   ]

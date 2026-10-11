@@ -50,5 +50,9 @@ data class UserProfile(
     val dailyFolate: Float? = null,
     
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+
+    // Profile fields the user never filled in (e.g. "age", "weight"). Values for these
+    // are defaults, so prompts must not present them as the user's real data.
+    val missingFields: List<String> = emptyList()
 )

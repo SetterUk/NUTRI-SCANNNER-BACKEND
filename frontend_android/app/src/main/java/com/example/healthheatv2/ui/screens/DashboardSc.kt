@@ -60,7 +60,11 @@ fun DashboardSc(
             .format(java.util.Date())
     }
 
-    LaunchedEffect(refreshTrigger) {
+    // Live list of today's meals; totals and gaps below recompute whenever it changes.
+    val todayMeals by remember(nutritionEngine) { nutritionEngine.observeTodayMeals() }
+        .collectAsState(initial = emptyList())
+
+    LaunchedEffect(refreshTrigger, todayMeals) {
         gaps = nutritionEngine.calculateGaps()
         intake = nutritionEngine.getTodayIntake()
         historicalMeals = nutritionEngine.getHistoricalMeals()
@@ -142,6 +146,26 @@ fun DashboardSc(
                 modifier = Modifier.weight(1f)
             )
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        com.example.healthheatv2.ui.components.TodayMealsCard(
+            meals = todayMeals,
+            onDelete = { meal -> scope.launch { nutritionEngine.deleteMeal(meal.id) } },
+            onAdd = { text ->
+                val outcomes = nutritionEngine.logFoodsFromText(text)
+                val logged = outcomes.filter { it !is NutritionEngine.LogOutcome.NotFound }
+                val missing = outcomes.filterIsInstance<NutritionEngine.LogOutcome.NotFound>()
+                buildString {
+                    if (logged.isNotEmpty()) append("Logged ${logged.joinToString(", ") { it.label }}.")
+                    if (missing.isNotEmpty()) {
+                        if (isNotEmpty()) append(" ")
+                        append("Couldn't find ${missing.joinToString(", ") { it.label }}. Try asking NutriBot, it can estimate unlisted foods.")
+                    }
+                    if (isEmpty()) append("Nothing recognised. Try something like \"2 roti, 1 bowl dal\".")
+                }
+            }
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 

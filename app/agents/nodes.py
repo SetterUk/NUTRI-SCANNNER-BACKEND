@@ -32,8 +32,41 @@ async def intent_agent(state: AgentState) -> Dict[str, Any]:
     """
     product_name = state.get("product_name", "Unknown")
     category_tag = state.get("category_tag", "")
+    nutrients = state.get("nutrients") or {}
+    ingredients_text = state.get("ingredients_text") or ""
+    nova_group = state.get("nova_group")
+    nutri_score = state.get("nutri_score")
 
-    logger.info(f"Intent Agent classifying: '{product_name}' (category: '{category_tag}')")
+    # Fast-path 1: Deterministic Food Detection (Instant - 0ms latency)
+    # If the product has nutrition info, NOVA group, NutriScore, or ingredients, it is a food product
+    if nutrients or nova_group is not None or nutri_score is not None or (ingredients_text and len(ingredients_text.strip()) > 3):
+        logger.info(f"Intent Agent (Fast-Path): '{product_name}' verified as FOOD via nutritional metadata.")
+        return {"is_food": True}
+
+    cat_lower = f"{category_tag} {product_name}".lower()
+    
+    # Fast-path 2: Obvious non-food keywords
+    non_food_keywords = [
+        "shampoo", "soap", "detergent", "cleaner", "lotion", "battery", "toothpaste",
+        "deodorant", "bleach", "disinfectant", "cosmetic", "perfume", "skin care",
+        "conditioner", "body wash", "pet food", "cat food", "dog food"
+    ]
+    if any(kw in cat_lower for kw in non_food_keywords):
+        logger.info(f"Intent Agent (Fast-Path): '{product_name}' verified as NON-FOOD via keyword matching.")
+        return {"is_food": False}
+
+    # Fast-path 3: Obvious food keywords
+    food_keywords = [
+        "food", "beverage", "drink", "snack", "dairy", "cereal", "biscuit", "cookie",
+        "edible", "tea", "coffee", "juice", "oil", "bread", "pasta", "sauce",
+        "condiment", "spice", "flour", "fruit", "vegetable", "meat", "fish", "chocolate",
+        "sweet", "chips", "noodle", "rice", "dal", "milk", "cheese", "curd", "yogurt"
+    ]
+    if any(kw in cat_lower for kw in food_keywords):
+        logger.info(f"Intent Agent (Fast-Path): '{product_name}' verified as FOOD via category keywords.")
+        return {"is_food": True}
+
+    logger.info(f"Intent Agent classifying via LLM: '{product_name}' (category: '{category_tag}')")
 
     prompt = f"""You are classifying a scanned product barcode result.
 

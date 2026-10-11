@@ -60,23 +60,32 @@ import com.example.healthheatv2.services.calculateBMI
 import com.example.healthheatv2.services.calculateBMR
 import com.example.healthheatv2.services.calculateTDEE
 import com.example.healthheatv2.services.calculateTargets
+import com.example.healthheatv2.services.ProfileNormalizer
 
 fun mapNetworkProfileToLocal(profile: UserProfileResponse?): com.example.healthheatv2.data.UserProfile {
-    val age = profile?.age ?: 25
-    val sex = profile?.gender ?: "Other"
-    val heightCm = profile?.height?.toFloat() ?: 170f
-    val weightKg = profile?.weightKg?.toFloat() ?: 70f
-    val activityLevel = profile?.activityLevel ?: "sedentary"
-    val primaryGoal = profile?.healthGoals ?: "general_health"
-    val dietType = profile?.dietaryPreferences ?: "omnivore"
-    
-    val isMale = sex.equals("Male", ignoreCase = true) || sex.equals("Prefer not to say", ignoreCase = true)
-    
+    // Track which values the user never gave us, so prompts can say "not provided"
+    // instead of presenting the fallback numbers as facts.
+    val missing = mutableListOf<String>()
+    val age = profile?.age?.takeIf { it in 10..110 } ?: 30.also { missing += "age" }
+    val heightCm = profile?.height?.toFloat()?.takeIf { it in 100f..250f } ?: 165f.also { missing += "height" }
+    val weightKg = profile?.weightKg?.toFloat()?.takeIf { it in 25f..300f } ?: 65f.also { missing += "weight" }
+    if (profile?.gender.isNullOrBlank()) missing += "sex"
+    if (profile?.activityLevel.isNullOrBlank()) missing += "activity level"
+    if (profile?.healthGoals.isNullOrBlank()) missing += "goal"
+
+    val sexEnum = ProfileNormalizer.sex(profile?.gender)
+    val sex = ProfileNormalizer.sexLabel(profile?.gender)
+    val activityLevel = ProfileNormalizer.activity(profile?.activityLevel)
+    val primaryGoal = ProfileNormalizer.goal(profile?.healthGoals, profile?.dietaryPreferences)
+    val dietType = ProfileNormalizer.diet(profile?.dietaryPreferences)
+    val healthTags = ProfileNormalizer.healthTags(profile?.healthTags, profile?.dietaryPreferences, profile?.healthGoals)
+    val micros = ProfileNormalizer.microTargets(profile?.gender)
+
     val bmi = calculateBMI(heightCm, weightKg)
-    val bmr = calculateBMR(age, isMale, heightCm, weightKg)
+    val bmr = calculateBMR(age, sexEnum, heightCm, weightKg)
     val tdee = calculateTDEE(bmr, activityLevel)
     val targets = calculateTargets(tdee, primaryGoal, dietType, weightKg)
-    
+
     return com.example.healthheatv2.data.UserProfile(
         age = age,
         sex = sex,
@@ -86,11 +95,11 @@ fun mapNetworkProfileToLocal(profile: UserProfileResponse?): com.example.healthh
         primaryGoal = primaryGoal,
         secondaryGoals = emptyList(),
         dietType = dietType,
-        allergies = profile?.allergies ?: emptyList(),
-        dietaryRestrictions = emptyList(),
+        allergies = profile?.allergies.orEmpty().map { it.trim() }.filter { it.isNotBlank() },
+        dietaryRestrictions = ProfileNormalizer.dietaryRestrictions(profile?.dietaryPreferences),
         dislikedFoods = emptyList(),
         preferredCuisines = emptyList(),
-        healthTags = profile?.healthTags ?: emptyList(),
+        healthTags = healthTags,
         medicalReports = profile?.medicalReports ?: "",
         bmi = bmi,
         bmr = bmr,
@@ -101,12 +110,13 @@ fun mapNetworkProfileToLocal(profile: UserProfileResponse?): com.example.healthh
         dailyFat = targets.dailyFat,
         dailyFiber = targets.dailyFiber,
         dailyWater = targets.dailyWater,
-        dailyIron = 18f,
-        dailyCalcium = 1000f,
-        dailyZinc = 11f,
-        dailyB12 = 2.4f,
-        dailyVitaminD = 600f,
-        dailyFolate = 400f
+        dailyIron = micros.iron,
+        dailyCalcium = micros.calcium,
+        dailyZinc = micros.zinc,
+        dailyB12 = micros.b12,
+        dailyVitaminD = micros.vitaminD,
+        dailyFolate = micros.folate,
+        missingFields = missing
     )
 }
 
@@ -151,7 +161,6 @@ fun App(modifier: Modifier = Modifier) {
         val colors = LocalAppColors.current
 
         val userDatabase = com.example.healthheatv2.data.UserDatabase.getDatabase(context)
-        val foodDatabase = com.example.healthheatv2.data.FoodDatabaseHelper(context)
         val repository = ProductRepository(
             productDao = userDatabase.productDao(),
             apiService = RetrofitClient.apiService
@@ -167,6 +176,9 @@ fun App(modifier: Modifier = Modifier) {
             )
         }
         // Cloud AI is default. Only initialize on-device Gemma if user previously enabled local model.
+        LaunchedEffect(Unit) {
+            com.example.healthheatv2.data.FoodSeeder.ensureSeeded(context, userDatabase.nutritionDao())
+        }
         LaunchedEffect(Unit) {
             if (nanoCoach.useLocalModel.value) {
                 gemmaManager.initialize()
@@ -277,8 +289,10 @@ fun App(modifier: Modifier = Modifier) {
                 composable(Screen.NutritionistChat.route) {
                     val profile = userProfile
                     if (profile != null) {
-                        val mappedProfile = mapNetworkProfileToLocal(profile)
-                        val nutritionEngine = com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                        val mappedProfile = remember(profile) { mapNetworkProfileToLocal(profile) }
+                        val nutritionEngine = remember(mappedProfile) {
+                            com.example.healthheatv2.services.NutritionEngine(userDatabase, mappedProfile)
+                        }
                         val voiceCoach = remember(mappedProfile) {
                             com.example.healthheatv2.ai.VoiceNutritionistCoach(context, nanoCoach)
                         }
@@ -394,7 +408,12 @@ fun App(modifier: Modifier = Modifier) {
                     }
                     ProfileScreen(
                         authViewModel = authViewModel,
-                        onBackClick = { navController.popBackStack() }
+                        onBackClick = { navController.popBackStack() },
+                        onAccountDeleted = {
+                            navController.navigate(Screen.Auth.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
                     )
                 }
 

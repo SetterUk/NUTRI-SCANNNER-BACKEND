@@ -12,7 +12,9 @@ class Settings(BaseSettings):
         if not self.GROQ_API_KEYS:
             return []
         return [k.strip() for k in self.GROQ_API_KEYS.split(",") if k.strip()]
-    SECRET_KEY: str = "supersecretfallbackkeyfornutriscannerapi"
+    # No default: with a public fallback key anyone could forge a login token for any user.
+    # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # Google Auth Configuration

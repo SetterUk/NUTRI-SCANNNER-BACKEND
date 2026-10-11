@@ -4,7 +4,7 @@ from sqlmodel import SQLModel
 from app.core.config import settings
 
 # Import models to ensure they are registered with SQLModel.metadata
-from app.models.products import Product, UserAddedProduct
+from app.models.products import Product, UserAddedProduct, PersonalizedAnalysis
 from app.models.users import User, UserProfile, UserScan
 
 
@@ -57,6 +57,8 @@ async def init_db():
             await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_fat FLOAT;"))
             await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_fiber FLOAT;"))
             await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS daily_water FLOAT;"))
+            await conn.execute(text("ALTER TABLE userprofile ADD COLUMN IF NOT EXISTS medical_reports TEXT;"))
+            await conn.execute(text("ALTER TABLE product ADD COLUMN IF NOT EXISTS analysis_version INTEGER DEFAULT 0;"))
             
             # 2. Relax constraints for columns that became Optional
             await conn.execute(text("ALTER TABLE product ALTER COLUMN verdict DROP NOT NULL;"))

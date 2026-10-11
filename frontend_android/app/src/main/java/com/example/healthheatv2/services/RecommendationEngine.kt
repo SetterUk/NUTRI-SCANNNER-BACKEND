@@ -31,21 +31,49 @@ class RecommendationEngine(
         // 2. Fetch Base Candidates from IFCTFood table
         val allFoods = dao.getAllIFCTFoods()
         
-        val userDiet = userProfile.dietType.lowercase()
-        val isVegetarian = userDiet == "vegetarian" || userDiet == "vegan"
+        val userDiet = userProfile.dietType.lowercase().trim()
         val isVegan = userDiet == "vegan"
-        val hasPeanutAllergy = userProfile.allergies.any { it.equals("peanut", ignoreCase = true) }
-        val hasDairyAllergy = userProfile.allergies.any { it.equals("dairy", ignoreCase = true) }
+        val isVegetarian = isVegan || userDiet == "vegetarian" || userDiet == "jain" || userDiet == "eggitarian"
+        val isJain = userDiet == "jain"
+        val userAllergies = userProfile.allergies.map { it.lowercase().trim() }.filter { it.isNotBlank() }
+
+        val nonVegKeywords = listOf("chicken", "mutton", "fish", "meat", "prawn", "crab", "pork", "beef", "poultry", "seafood", "salmon", "tuna")
+        val dairyKeywords = listOf("milk", "paneer", "curd", "yogurt", "ghee", "butter", "cheese", "whey", "cream", "dahi")
+        val eggKeywords = listOf("egg", "anda", "omelette")
+        val rootVegKeywords = listOf("onion", "garlic", "potato", "carrot", "radish", "beetroot")
 
         for (food in allFoods) {
-            // 3. Filter by Diet Preferences
-            if (isVegetarian && !food.tags.contains("vegetarian", ignoreCase = true)) continue
-            // if vegan, we ideally check for vegan tag, but IFCT only marks vegetarian. We skip Dairy category.
-            if (isVegan && food.tags.contains("Dairy", ignoreCase = true)) continue
+            val tags = food.tags.lowercase()
+            val name = food.food_name.lowercase()
 
-            // 4. Filter by Allergies
-            if (hasPeanutAllergy && food.food_name.contains("peanut", ignoreCase = true)) continue
-            if (hasDairyAllergy && food.tags.contains("Dairy", ignoreCase = true)) continue
+            // 3. Strict Diet Filtering
+            if (isVegetarian) {
+                if (tags.contains("non-vegetarian") || nonVegKeywords.any { name.contains(it) || tags.contains(it) }) continue
+                if (userDiet != "eggitarian" && eggKeywords.any { name.contains(it) || tags.contains(it) }) continue
+            }
+            if (isVegan) {
+                if (tags.contains("non-vegetarian") || tags.contains("dairy")) continue
+                if (nonVegKeywords.any { name.contains(it) || tags.contains(it) }) continue
+                if (dairyKeywords.any { name.contains(it) || tags.contains(it) }) continue
+                if (eggKeywords.any { name.contains(it) || tags.contains(it) }) continue
+                if (name.contains("honey") || tags.contains("honey")) continue
+            }
+            if (isJain) {
+                if (rootVegKeywords.any { name.contains(it) || tags.contains(it) }) continue
+            }
+
+            // 4. Strict Allergen Filtering
+            var hasAllergyConflict = false
+            for (allergy in userAllergies) {
+                if (name.contains(allergy) || tags.contains(allergy)) { hasAllergyConflict = true; break }
+                if ((allergy == "peanut" || allergy == "peanuts" || allergy == "nuts") && (name.contains("peanut") || name.contains("groundnut"))) { hasAllergyConflict = true; break }
+                if ((allergy == "milk" || allergy == "dairy" || allergy == "lactose") && (dairyKeywords.any { name.contains(it) || tags.contains(it) })) { hasAllergyConflict = true; break }
+                if ((allergy == "egg" || allergy == "eggs") && (eggKeywords.any { name.contains(it) || tags.contains(it) })) { hasAllergyConflict = true; break }
+                if ((allergy == "gluten" || allergy == "wheat") && (name.contains("wheat") || name.contains("atta") || name.contains("maida") || name.contains("bread") || name.contains("roti") || name.contains("gluten"))) { hasAllergyConflict = true; break }
+                if ((allergy == "soy" || allergy == "soya") && (name.contains("soy") || name.contains("soya") || name.contains("tofu"))) { hasAllergyConflict = true; break }
+                if ((allergy == "fish" || allergy == "seafood" || allergy == "shellfish") && (name.contains("fish") || name.contains("prawn") || name.contains("seafood"))) { hasAllergyConflict = true; break }
+            }
+            if (hasAllergyConflict) continue
 
             // 5. Calculate Contribution
             val nutrientAmountPer100g = when (targetNutrient) {

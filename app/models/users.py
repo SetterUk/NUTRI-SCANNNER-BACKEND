@@ -36,6 +36,9 @@ class UserProfile(SQLModel, table=True):
 
     # Health tags (Diabetic, Vegan, etc.)
     health_tags: List[str] = Field(default=[], sa_type=JSON)
+
+    # Free-text notes / extracted lab report text the user chose to share
+    medical_reports: Optional[str] = None
     
     # Calculated Targets
     bmi: Optional[float] = None

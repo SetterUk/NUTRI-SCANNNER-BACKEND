@@ -94,7 +94,10 @@ private fun CameraPreviewWithOverlay(
         LifecycleCameraController(context).apply {
             cameraSelector = androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA
             val barcodeScanner = BarcodeScanning.getClient(
-                BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS).build()
+                // Packaged food uses EAN/UPC only; scanning every format is slower and picks up QR codes on the pack.
+                BarcodeScannerOptions.Builder().setBarcodeFormats(
+                    Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E
+                ).build()
             )
             setImageAnalysisAnalyzer(
                 mainExecutor,

@@ -94,6 +94,9 @@ fun ProductScreen(
 
     var aiVerdictText by remember { mutableStateOf<String?>(null) }
     var aiVerdictLoading by remember { mutableStateOf(false) }
+    var isFoodLogged by remember { mutableStateOf(false) }
+    var selectedPortionGrams by remember { mutableStateOf(100f) }
+    var selectedMealSlot by remember { mutableStateOf("snack") }
     val scope = rememberCoroutineScope()
 
     when (captureState) {
@@ -199,6 +202,28 @@ fun ProductScreen(
                                 onClick = onViewDetails
                             )
                         }
+                    }
+                }
+
+                // ── 1-Tap Log Food Card ───────────
+                if (!isNonFood) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        LogProductToTrackerCard(
+                            product = product,
+                            isLogged = isFoodLogged,
+                            selectedPortion = selectedPortionGrams,
+                            selectedSlot = selectedMealSlot,
+                            onPortionChange = { selectedPortionGrams = it },
+                            onSlotChange = { selectedMealSlot = it },
+                            onLogClick = {
+                                scope.launch {
+                                    nutritionEngine.logScannedProduct(product, selectedPortionGrams, selectedMealSlot)
+                                    isFoodLogged = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
                     }
                 }
 
@@ -1550,6 +1575,146 @@ fun AiPersonalVerdictCard(
                         Text("Ask AI — Is This Good For Me?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun LogProductToTrackerCard(
+    product: com.example.healthheatv2.network.FoodResponse,
+    isLogged: Boolean,
+    selectedPortion: Float,
+    selectedSlot: String,
+    onPortionChange: (Float) -> Unit,
+    onSlotChange: (String) -> Unit,
+    onLogClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalAppColors.current
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = colors.card,
+        border = BorderStroke(1.dp, if (isLogged) colors.accentGreen else colors.border),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isLogged) "✅" else "🍽️", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isLogged) "Logged to Today's Diary" else "Log to Food Tracker",
+                            color = colors.textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = if (isLogged) "Nutrition calculated & saved to daily goals" else "Track this food against your daily calorie targets",
+                        color = colors.textHint,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            if (!isLogged) {
+                Spacer(modifier = Modifier.height(14.dp))
+                
+                // Meal Slot Pills
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("breakfast", "lunch", "snack", "dinner").forEach { slot ->
+                        val isSelected = selectedSlot == slot
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) colors.accentGreen.copy(alpha = 0.2f) else colors.background,
+                            border = BorderStroke(1.dp, if (isSelected) colors.accentGreen else colors.border),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onSlotChange(slot) }
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = slot.replaceFirstChar { it.uppercase() },
+                                    color = if (isSelected) colors.accentGreen else colors.textSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Portion Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(50f to "50g", 100f to "100g", 150f to "150g", 200f to "200g").forEach { (portion, label) ->
+                        val isSelected = selectedPortion == portion
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) colors.accentGreen.copy(alpha = 0.2f) else colors.background,
+                            border = BorderStroke(1.dp, if (isSelected) colors.accentGreen else colors.border),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onPortionChange(portion) }
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) colors.accentGreen else colors.textSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                androidx.compose.material3.Button(
+                    onClick = onLogClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = CircleShape,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = colors.accentGreen
+                    )
+                ) {
+                    Text(
+                        text = "+ Log ${selectedPortion.toInt()}g to ${selectedSlot.replaceFirstChar { it.uppercase() }}",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Added to your daily macros! Check the Dashboard to see your live updated calorie & protein targets.",
+                    color = colors.accentGreen,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
             }
         }
     }

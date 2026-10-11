@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,18 +9,33 @@ plugins {
     id("kotlin-kapt")
 }
 
+// Release signing: create frontend_android/keystore.properties (never commit it) with
+// storeFile, storePassword, keyAlias, keyPassword. See PLAY_STORE_RELEASE.md.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.example.healthheatv2"
     compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.healthheatv2"
-        minSdk = 31
-        targetSdk = 35
+        minSdk = 26
+        // Google Play requires new apps and updates to target API 36 (Android 16) from 31 Aug 2026.
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    kapt {
+        arguments {
+            // Exported Room schemas let us write and verify migrations; commit this folder.
+            arg("room.schemaLocation", "$projectDir/schemas")
+        }
     }
 
     signingConfigs {
@@ -28,6 +45,14 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -35,6 +60,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
+            if (keystorePropsFile.exists()) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
