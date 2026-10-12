@@ -4,43 +4,54 @@ import android.util.Log
 import com.example.healthheatv2.network.ApiService
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.network.RetrofitClient
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 class ProductRepository(
     private val productDao: ProductDao,
     private val apiService: ApiService
 ) {
-    // Fetches the product, handling the caching logic automatically
+    /**
+     * Recent results come from the phone; older ones are re-fetched so improved analyses,
+     * profile changes and new alternatives reach the user. A stale copy is only used when
+     * the server can't be reached.
+     */
     suspend fun getProduct(barcode: String): FoodResponse {
-        // 1. Check local database first
-        val cachedProduct = productDao.getProduct(barcode)
-
-        if (cachedProduct != null) {
-            Log.d("REPOSITORY", "Cache hit! Loaded $barcode from local database.")
-            return cachedProduct.foodResponse
+        val cached = productDao.getProduct(barcode)
+        val fresh = cached != null &&
+            System.currentTimeMillis() - cached.scannedAt < CACHE_TTL_MS &&
+            cached.foodResponse.healthScore != null
+        if (fresh) {
+            Log.d("REPOSITORY", "Cache hit for $barcode")
+            return cached!!.foodResponse
         }
 
-        // 2. If not found locally, fetch from the API
-        Log.d("REPOSITORY", "Cache miss! Fetching $barcode from API...")
-        val networkResponse = apiService.getFoodData(barcode)
+        val networkResponse = try {
+            apiService.getFoodData(barcode)
+        } catch (e: java.io.IOException) {
+            if (cached != null) return cached.foodResponse
+            throw e
+        } catch (e: retrofit2.HttpException) {
+            if (cached != null && e.code() >= 500) return cached.foodResponse
+            throw e
+        }
 
-        // 3. Save the new API response to the local database for next time
-        val newEntity = ProductCacheEntity(
-            barcode = barcode,
-            foodResponse = networkResponse
-        )
-        productDao.insertProduct(newEntity)
-
-        // 4. Clean up old entries to keep the database size manageable (max 100)
-        productDao.cleanupOldEntries()
-
-        // 5. Return the fresh data
+        // A failed analysis must not stick: the user should get a real result on the next try.
+        if (networkResponse.healthScore != null) {
+            productDao.insertProduct(ProductCacheEntity(barcode = barcode, foodResponse = networkResponse))
+            productDao.cleanupOldEntries()
+        }
         return networkResponse
     }
+
+    /** Results are personalized (allergy alerts, alternatives), so they must not outlive the account. */
+    suspend fun clearCache() = productDao.deleteAll()
 
     suspend fun contributeToDatabase(barcode: String, newName: String, newIngredients: String, imageBase64: String?) {
         try {
             apiService.contributeProduct(
-                barcode, 
+                barcode,
                 com.example.healthheatv2.network.ContributeRequest(newName, newIngredients, imageBase64)
             )
         } catch (e: Exception) {
@@ -60,7 +71,11 @@ class ProductRepository(
                 val apiHistory = apiService.getHistory()
                 // Convert to ProductCacheEntity for UI compatibility
                 apiHistory.map {
-                    ProductCacheEntity(barcode = it.barcode ?: "", foodResponse = it)
+                    ProductCacheEntity(
+                        barcode = it.barcode ?: "",
+                        foodResponse = it,
+                        scannedAt = parseServerTime(it.scannedAt) ?: 0L
+                    )
                 }
             } else {
                 productDao.getSearchHistory()
@@ -68,6 +83,24 @@ class ProductRepository(
         } catch (e: Exception) {
             Log.e("REPOSITORY", "Failed to fetch cloud history", e)
             productDao.getSearchHistory()
+        }
+    }
+
+    companion object {
+        const val CACHE_TTL_MS = 12 * 60 * 60 * 1000L
+    }
+}
+
+/** The backend sends naive UTC timestamps ("2026-10-12T09:30:00.123456"). */
+fun parseServerTime(iso: String?): Long? {
+    if (iso.isNullOrBlank()) return null
+    return try {
+        OffsetDateTime.parse(iso).toInstant().toEpochMilli()
+    } catch (e: Exception) {
+        try {
+            LocalDateTime.parse(iso).toInstant(ZoneOffset.UTC).toEpochMilli()
+        } catch (e: Exception) {
+            null
         }
     }
 }

@@ -50,13 +50,15 @@ fun OnboardingScreen(
     var weight by remember { mutableStateOf("") }
     var height by remember { mutableStateOf("") }
     var allergies by remember { mutableStateOf("") }
-    var healthGoals by remember { mutableStateOf("") }
+    var selectedGoal by remember { mutableStateOf("general_health") }
+    var selectedConditions by remember { mutableStateOf(setOf<String>()) }
     var medicalReports by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("Prefer not to say") }
     var activityLevel by remember { mutableStateOf("Prefer not to say") }
     var selectedDiet by remember { mutableStateOf("None") }
 
-    val diets = listOf("None", "Vegan", "Vegetarian", "Keto", "Diabetic", "Bulking", "Gluten-Free")
+    // Goal and conditions now have their own pickers, so "Diabetic"/"Bulking" are no longer diet options.
+    val diets = listOf("None", "Vegetarian", "Eggitarian", "Jain", "Vegan", "Keto", "Gluten-Free")
     val genders = listOf("Prefer not to say", "Female", "Male", "Non-binary", "Other")
     val activityLevels = listOf("Prefer not to say", "Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Extra Active")
 
@@ -456,21 +458,11 @@ fun OnboardingScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            OutlinedTextField(
-                                value = healthGoals,
-                                onValueChange = { healthGoals = it },
-                                label = { Text("Health Goals & Conditions (comma separated)") },
-                                placeholder = { Text("e.g. Weight loss, Diabetic, High blood pressure") },
-                                modifier = Modifier.fillMaxWidth().height(120.dp),
-                                maxLines = 4,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = colors.accentGreen,
-                                    unfocusedBorderColor = colors.border,
-                                    focusedTextColor = colors.textPrimary,
-                                    unfocusedTextColor = colors.textPrimary,
-                                    cursorColor = colors.accentGreen
-                                ),
-                                shape = RoundedCornerShape(12.dp)
+                            com.example.healthheatv2.ui.components.GoalConditionPicker(
+                                selectedGoal = selectedGoal,
+                                onGoalChange = { selectedGoal = it },
+                                selectedConditions = selectedConditions,
+                                onConditionsChange = { selectedConditions = it }
                             )
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -539,7 +531,8 @@ fun OnboardingScreen(
                                             profileData["dietary_preferences"] = if (selectedDiet == "None") "" else selectedDiet
                                             profileData["gender"] = if (gender == "Prefer not to say") "" else gender
                                             profileData["activity_level"] = if (activityLevel == "Prefer not to say") "" else activityLevel
-                                            if (healthGoals.isNotBlank()) profileData["health_goals"] = healthGoals
+                                            profileData["health_goals"] = selectedGoal
+                                            profileData["health_tags"] = selectedConditions.toList()
                                             if (medicalReports.isNotBlank()) profileData["medical_reports"] = medicalReports
                                             
                                             // Calculate BMI and BMR
@@ -549,8 +542,7 @@ fun OnboardingScreen(
                                             if (hCm > 0f && wKg > 0f) {
                                                 profileData["bmi"] = calculateBMI(hCm, wKg)
                                                 if (ageYrs > 0) {
-                                                    val isMale = gender == "Male" || gender == "Prefer not to say" // default to male formula if unknown for demo
-                                                    profileData["bmr"] = calculateBMR(ageYrs, isMale, hCm, wKg)
+                                                    profileData["bmr"] = calculateBMR(ageYrs, com.example.healthheatv2.services.ProfileNormalizer.sex(gender), hCm, wKg)
                                                 }
                                             }
 

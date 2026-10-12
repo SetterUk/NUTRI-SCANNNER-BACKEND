@@ -16,9 +16,13 @@ class Product(SQLModel, table=True):
     nova_group: Optional[int] = None
     nova_tags: Optional[List[str]] = Field(default=None, sa_type=JSON)
     nutri_score: Optional[str] = None
+    # Comma-separated OFF category tags, broad → specific
     categories: Optional[str] = None
+    food_groups: Optional[List[str]] = Field(default=None, sa_type=JSON)
+    diet_tags: Optional[List[str]] = Field(default=None, sa_type=JSON)
 
-    # AI Analysis Fields (Now Optional for Per-User Result)
+    # Generic (profile-free) AI analysis. Personalized results live in PersonalizedAnalysis;
+    # they must never be cached here, or one user's verdict is shown to everyone.
     verdict: Optional[str] = None
     is_good_for_health: Optional[bool] = None
     health_reason: Optional[str] = None
@@ -28,6 +32,18 @@ class Product(SQLModel, table=True):
     summary: Optional[str] = None
     ingredients_analysis: List[Dict[str, Any]] = Field(default=[], sa_type=JSON)
     nutrition_analysis: Dict[str, Any] = Field(default={}, sa_type=JSON)
+    score_breakdown: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)
+
+    # Bumped when the cached generic analysis format/meaning changes; rows with an older
+    # version are re-fetched from OFF and re-analysed. v2 = first version guaranteed to be
+    # profile-free. v3 = full category list, five-band verdicts, score breakdown.
+    analysis_version: int = Field(default=0)
+
+    # Healthier products from the same category (see services/alternatives.py), unfiltered;
+    # allergy/diet filtering happens per request.
+    alternatives: Optional[List[Dict[str, Any]]] = Field(default=None, sa_type=JSON)
+    alternatives_version: int = Field(default=0)
+    alternatives_updated_at: Optional[datetime] = None
 
     # Metadata
     source: str = Field(default="OFF") # "OFF" or "MANUAL"
@@ -43,6 +59,15 @@ class Product(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class PersonalizedAnalysis(SQLModel, table=True):
+    """AI verdict for one user + product, valid only while the user's profile is unchanged."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    barcode: str = Field(foreign_key="product.barcode", index=True)
+    profile_hash: str
+    payload: Dict[str, Any] = Field(default={}, sa_type=JSON)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class UserAddedProduct(SQLModel, table=True):
     """

@@ -8,7 +8,9 @@ import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.services.GapAnalysis
 import com.example.healthheatv2.services.NutritionGap
 import com.example.healthheatv2.services.NutritionIntake
-import com.example.healthheatv2.ui.screens.ChatMessage
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 data class NutrientGap(
     val nutrient: String,
@@ -24,106 +26,136 @@ data class CurrentContext(
 )
 
 /**
- * Builds all AI system prompts for Gemma 4 E2B.
- * Each method is tailored to a specific use case and injects the full user context.
+ * Builds all AI system prompts for Gemma 4 E2B and Cloud AI.
+ * Each method is tailored to a specific use case and injects the user's real context.
  *
- * Critical rules enforced in every prompt:
- * - NEVER violate allergies or diet type
- * - NEVER use markdown (Gemma 4 TTS-safe plain text output)
- * - NEVER diagnose or prescribe; escalate to doctor
- * - ALWAYS use the user's actual numeric data
+ * Rules enforced in every prompt:
+ * - Never violate allergies or diet type
+ * - Plain text only (output is also read aloud by TTS)
+ * - Use the user's actual numbers; say "not provided" instead of inventing missing ones
+ * - Give practical food guidance directly; defer only diagnosis/medication questions to a doctor
  */
 class NutritionistPrompt {
 
     // ── Shared user context block (injected into every prompt) ────────────────
 
-    private fun buildUserContextJson(
+    private fun goalLabel(goal: String): String = when (goal) {
+        "weight_loss" -> "lose weight"
+        "weight_gain" -> "gain weight"
+        "muscle_gain" -> "build muscle"
+        else -> "eat healthier / maintain"
+    }
+
+    private fun buildUserContext(
         profile: UserProfile,
         intake: NutritionIntake?,
         gaps: GapAnalysis?,
         todayMeals: List<LoggedMeal> = emptyList(),
-        icmrRule: ICMRRule? = null,
+        icmrRules: List<ICMRRule> = emptyList(),
         eligibleFoods: List<IFCTFood> = emptyList()
     ): String {
-        val heightM = (profile.heightCm / 100f).coerceAtLeast(0.5f)
-        val calculatedBmi = profile.bmi ?: String.format(java.util.Locale.US, "%.1f", profile.weightKg / (heightM * heightM)).toFloatOrNull() ?: 22.0f
-        val calculatedBmr = profile.bmr ?: if (profile.sex.equals("F", true)) {
-            (10f * profile.weightKg + 6.25f * profile.heightCm - 5f * profile.age - 161f)
-        } else {
-            (10f * profile.weightKg + 6.25f * profile.heightCm - 5f * profile.age + 5f)
-        }
-        val calculatedTdee = profile.tdee ?: (calculatedBmr * 1.375f)
+        val missing = profile.missingFields.toSet()
+        fun orMissing(field: String, value: String) = if (field in missing) "not provided" else value
 
-        val topGaps = gaps?.topThreeGaps?.joinToString(", ") {
-            "${it.nutrient}: need ${it.gap.toInt()}${it.unit} more"
-        } ?: "Calorie gap: ${maxOf(0, (profile.dailyCalories?.toInt() ?: 2000) - (intake?.calories?.toInt() ?: 0))} kcal"
+        val bmi = profile.bmi?.let { String.format(Locale.US, "%.1f", it) } ?: "unknown"
+
+        val topGaps = gaps?.topThreeGaps?.filter { it.gap > 0f }?.joinToString(", ") {
+            "${it.nutrient} ${it.gap.toInt()}${it.unit} short"
+        }?.ifBlank { "none, targets met so far" }
+            ?: "Calories ${maxOf(0, (profile.dailyCalories?.toInt() ?: 2000) - (intake?.calories?.toInt() ?: 0))} kcal remaining"
 
         val allergyStr = if (profile.allergies.isNotEmpty()) {
-            profile.allergies.joinToString(", ").uppercase() + " (STRICT ZERO TOLERANCE)"
+            profile.allergies.joinToString(", ").uppercase() + " (never suggest anything containing these)"
         } else "None"
 
-        val conditionsStr = profile.healthTags.joinToString(", ").ifBlank { "General wellness" }
-        val foodOptions = eligibleFoods.take(4).joinToString(", ") { "${it.food_name} (${it.protein_g}g P)" }
-            .ifBlank { "Indian lentils, paneer, sprouts, millets" }
+        val dietRule = when (profile.dietType.lowercase().trim()) {
+            "vegan" -> "VEGAN: no meat, fish, eggs, milk, paneer, curd, ghee, butter, cheese, whey or honey."
+            "vegetarian" -> "VEGETARIAN: no meat, chicken, fish, seafood or eggs. Dairy is fine."
+            "jain" -> "JAIN: no meat, fish or eggs, and no root vegetables (onion, garlic, potato, carrot, radish, beetroot)."
+            "eggitarian" -> "EGGITARIAN: vegetarian plus eggs. No meat or fish."
+            else -> "OMNIVORE: vegetarian and non-vegetarian foods are both fine."
+        }
+        val restrictions = profile.dietaryRestrictions.joinToString(", ").ifBlank { "none" }
+
+        val conditionsStr = profile.healthTags.joinToString(", ").ifBlank { "none reported" }
+        val conditionGuidance = icmrRules.joinToString("\n") {
+            "- ${it.condition_tag}: focus on ${it.clinical_focus}; limit ${it.must_avoid}; good swaps: ${it.recommended_swaps}"
+        }.ifBlank { "- none" }
+
+        val mealsToday = if (todayMeals.isEmpty()) "nothing logged yet" else todayMeals.joinToString("; ") {
+            "${it.mealSlot}: ${it.foodName} (${it.quantity.toInt()}g, ${it.calories.toInt()} kcal${if (it.isEstimated) ", estimated" else ""})"
+        }
+
+        val foodOptions = eligibleFoods.joinToString(", ") { it.food_name }.ifBlank { "use common Indian foods that fit the rules above" }
+
+        val missingNote = if (missing.isNotEmpty()) {
+            "\nNOTE: The user has not provided: ${missing.joinToString(", ")}. Targets use estimates for these. " +
+                "If it matters for the answer, briefly suggest they add it in Profile."
+        } else ""
 
         return """
-USER CLINICAL PROFILE:
-- Age: ${profile.age} | Sex: ${if (profile.sex.equals("F", true)) "Female" else "Male"} | Height: ${profile.heightCm.toInt()}cm | Weight: ${profile.weightKg.toInt()}kg
-- BMI: $calculatedBmi | BMR: ${calculatedBmr.toInt()} kcal/day | TDEE: ${calculatedTdee.toInt()} kcal/day
-- Primary Goal: ${profile.primaryGoal.replace("_", " ")} | Activity: ${profile.activityLevel}
-- Diet Type: ${profile.dietType.uppercase()} (Never suggest non-veg if veg/vegan)
-- ALLERGIES: $allergyStr
-- Health Conditions: $conditionsStr
-- Medical Notes: ${profile.medicalReports.replace("\n", " ").take(150).ifBlank { "None" }}
-- Daily Targets: ${profile.dailyCalories?.toInt() ?: 2000} kcal, ${profile.dailyProtein?.toInt() ?: 60}g protein
-- Today's Intake: ${intake?.calories?.toInt() ?: 0} kcal, ${intake?.protein?.toInt() ?: 0}g protein
-- Deficits / Gaps: $topGaps
-- Recommended Foods from DB: $foodOptions
+USER PROFILE:
+- Age: ${orMissing("age", profile.age.toString())} | Sex: ${orMissing("sex", profile.sex)} | Height: ${orMissing("height", "${profile.heightCm.toInt()} cm")} | Weight: ${orMissing("weight", "${profile.weightKg.toInt()} kg")}
+- BMI: $bmi | Activity: ${orMissing("activity level", profile.activityLevel)}
+- Goal: ${profile.primaryGoal} (${goalLabel(profile.primaryGoal)})
+- Diet: $dietRule
+- Other restrictions: $restrictions
+- Allergies: $allergyStr
+- Health conditions: $conditionsStr
+- Medical notes from user: ${profile.medicalReports.replace("\n", " ").take(600).ifBlank { "none" }}
+
+DAILY TARGETS: ${profile.dailyCalories?.toInt() ?: 2000} kcal, ${profile.dailyProtein?.toInt() ?: 60} g protein, ${profile.dailyCarbs?.toInt() ?: 250} g carbs, ${profile.dailyFat?.toInt() ?: 60} g fat, ${profile.dailyFiber?.toInt() ?: 30} g fiber
+TODAY SO FAR: ${intake?.calories?.toInt() ?: 0} kcal, ${intake?.protein?.toInt() ?: 0} g protein, ${intake?.carbs?.toInt() ?: 0} g carbs, ${intake?.fat?.toInt() ?: 0} g fat
+MEALS LOGGED TODAY: $mealsToday
+BIGGEST GAPS: $topGaps
+
+ICMR-NIN GUIDANCE FOR THEIR CONDITIONS:
+$conditionGuidance
+
+FOODS FROM OUR DATABASE THAT FIT THIS USER: $foodOptions$missingNote
         """.trimIndent()
     }
 
     // ── OUTPUT RULES (appended to every prompt) ───────────────────────────────
 
     private val outputRules = """
-DIRECT INSTRUCTIONS:
-1. When asked about BMI, BMR, targets, health stats, or MEAL PLANS (daily or weekly), provide the answer directly using the USER CLINICAL PROFILE and authentic Indian IFCT foods.
-2. If asked for a meal plan (e.g., 7 days or daily menu), give a clear, practical Indian menu structure (Breakfast, Lunch, Snack, Dinner) customized to their goal, diet type, and allergies.
-3. NEVER suggest any food containing their listed ALLERGIES or contrary to their DIET TYPE.
-4. Respond in PLAIN TEXT ONLY. No markdown, no bold, no asterisks, no hash symbols.
-5. Keep your tone warm, encouraging, expert, and structured.
+RULES:
+1. You are a nutrition coach. Give concrete, practical food guidance (meal plans, swaps, portions, calorie and macro maths) directly, using the profile above and everyday Indian foods.
+2. Follow ICMR-NIN dietary guidelines. Respect the diet and allergies above without exception.
+3. For diagnosis, medication, supplements in therapeutic doses, pregnancy, or kidney disease, still give the food guidance, then add one short line suggesting they confirm with their doctor. Do not refuse.
+4. Use the user's real numbers. Never invent numbers for fields marked "not provided".
+5. Respond in PLAIN TEXT ONLY. No markdown, bold, asterisks, hash symbols or tables. Short paragraphs or simple "Breakfast: ..." lines are fine.
+6. Be warm, specific and brief. Prefer 80-180 words unless the user asks for a full plan.
     """.trimIndent()
 
     // ── 1. CHAT PROMPT ────────────────────────────────────────────────────────
 
     /**
      * For the main Nutribot conversational chat in NutritionistChatSc.
+     * Conversation history is sent as separate chat messages, not embedded here.
      */
     fun buildChatSystemPrompt(
         profile: UserProfile,
         intake: NutritionIntake?,
         gaps: GapAnalysis?,
         todayMeals: List<LoggedMeal>,
-        icmrRule: ICMRRule?,
-        eligibleFoods: List<IFCTFood>,
-        chatHistory: List<ChatMessage>
+        icmrRules: List<ICMRRule>,
+        eligibleFoods: List<IFCTFood>
     ): String {
-        val memoryContext = chatHistory.takeLast(4).joinToString("\n") {
-            if (it.isUser) "User: ${it.text}" else "NutriBot: ${it.text}"
-        }.ifBlank { "No prior messages." }
-
-        val context = buildUserContextJson(profile, intake, gaps, todayMeals, icmrRule, eligibleFoods)
+        val context = buildUserContext(profile, intake, gaps, todayMeals, icmrRules, eligibleFoods)
 
         return """
-You are NutriBot, the user's personal nutrition and meal planning coach. You already have access to all their verified metrics and IFCT Indian food database below. Provide direct diet plans and nutrition guidance.
+You are NutriBot, a friendly Indian nutrition coach inside the HealthHeat app. Today is ${today()}.
 
 $context
 
-RECENT CONVERSATION:
-$memoryContext
-
 $outputRules
 
-FOOD LOGGING: If the user says they ate a food, append [LOG_FOOD: FoodName] at the end.
+FOOD LOGGING:
+When the user says they ate or drank something, confirm it warmly in one line and add one tag per food item at the very end of your reply, in exactly this format:
+[LOG_FOOD: <quantity and food as the user said it> | <estimated grams> | <kcal> | <protein g> | <carbs g> | <fat g>]
+Example: [LOG_FOOD: 2 roti | 80 | 240 | 7 | 40 | 3]
+Only add tags for food the user says they already ate, never for suggestions. The app removes the tags before showing your reply.
         """.trimIndent()
     }
 
@@ -137,32 +169,27 @@ FOOD LOGGING: If the user says they ate a food, append [LOG_FOOD: FoodName] at t
         product: FoodResponse,
         profile: UserProfile,
         intake: NutritionIntake?,
-        gaps: GapAnalysis?
+        gaps: GapAnalysis?,
+        icmrRules: List<ICMRRule> = emptyList()
     ): String {
-        val context = buildUserContextJson(profile, intake, gaps)
+        val context = buildUserContext(profile, intake, gaps, icmrRules = icmrRules)
         val ingredients = product.ingredientsText ?: product.ingredients?.joinToString(", ") ?: "Not available"
-        val backendScore = product.healthScore ?: "Not scored"
-        val backendVerdict = product.verdict ?: "Not analysed"
-        val calories = product.nutrients?.get("energy-kcal") ?: product.nutrients?.get("calories") ?: "?"
-        val protein = product.nutrients?.get("proteins") ?: product.nutrients?.get("protein") ?: "?"
-        val carbs = product.nutrients?.get("carbohydrates") ?: product.nutrients?.get("carbs") ?: "?"
-        val fat = product.nutrients?.get("fat") ?: "?"
+        val n = product.nutrients
+        fun nutrient(vararg keys: String): String = keys.firstNotNullOfOrNull { n?.get(it) }?.toString() ?: "?"
 
         return """
-You are an expert nutritionist. Analyse the scanned product below for THIS specific user.
-Tell them in 3-5 sentences: (1) Is this product good for their goal? (2) Any allergen or diet conflict? (3) How does it fit into today's remaining intake? Be warm and direct.
+You are NutriBot. Analyse the scanned product below for THIS specific user.
+In 3-5 sentences: (1) Is it a good choice for their goal and conditions? (2) Any allergen or diet conflict? (3) How much fits into today's remaining intake? Be warm and direct.
 
-USER DATA:
 $context
 
 SCANNED PRODUCT:
 - Name: ${product.name ?: "Unknown"}
 - Brand: ${product.brand ?: "Unknown"}
-- Calories per 100g: $calories kcal
-- Protein: ${protein}g | Carbs: ${carbs}g | Fat: ${fat}g
-- Ingredients: $ingredients
-- Backend Health Score: $backendScore/100
-- Backend Verdict: $backendVerdict
+- Per 100 g: ${nutrient("energy-kcal_100g", "energy-kcal")} kcal, protein ${nutrient("proteins_100g", "proteins")} g, carbs ${nutrient("carbohydrates_100g", "carbohydrates")} g, sugar ${nutrient("sugars_100g", "sugars")} g, fat ${nutrient("fat_100g", "fat")} g, sodium ${nutrient("sodium_100g", "sodium")} g
+- Ingredients: ${ingredients.take(800)}
+- Declared allergens: ${product.allergens?.ifBlank { null } ?: "none listed"}
+- Health score: ${product.healthScore ?: "not scored"}/100
 
 $outputRules
         """.trimIndent()
@@ -172,35 +199,33 @@ $outputRules
 
     /**
      * For the Dashboard "Get today's meal plan" AI card.
-     * Generates a practical, personalized full-day Indian meal plan.
+     * Generates a practical, personalized plan for the rest of the day.
      */
     fun buildMealPlanPrompt(
         profile: UserProfile,
         intake: NutritionIntake?,
         gaps: GapAnalysis?,
         todayMeals: List<LoggedMeal>,
-        icmrRule: ICMRRule?,
+        icmrRules: List<ICMRRule>,
         eligibleFoods: List<IFCTFood>
     ): String {
-        val context = buildUserContextJson(profile, intake, gaps, todayMeals, icmrRule, eligibleFoods)
+        val context = buildUserContext(profile, intake, gaps, todayMeals, icmrRules, eligibleFoods)
         val alreadyConsumedCal = intake?.calories?.toInt() ?: 0
         val targetCal = profile.dailyCalories?.toInt() ?: 2000
         val remainingCal = maxOf(0, targetCal - alreadyConsumedCal)
+        val eatenSlots = todayMeals.map { it.mealSlot }.toSet()
+        val slotsToPlan = listOf("breakfast", "lunch", "snack", "dinner").filter { it !in eatenSlots }
+            .ifEmpty { listOf("snack", "dinner") }
 
         return """
-You are an expert Indian nutritionist. Create a practical meal plan for the rest of today for this user.
-The user has already consumed $alreadyConsumedCal kcal today out of their $targetCal kcal target.
-They need approximately $remainingCal more kcal. Focus on filling their top nutrient deficits using Indian foods they can actually find.
+You are NutriBot, an Indian nutrition coach. Plan the rest of today for this user.
+They have eaten $alreadyConsumedCal of $targetCal kcal, so about $remainingCal kcal remain. Close their biggest gaps with foods easily found in an Indian kitchen, with portions in household units (katori, roti, glass).
 
-USER DATA:
 $context
 
-FORMAT (plain text, no markdown):
-Breakfast: (if not eaten yet)
-Lunch: (if not eaten yet)
-Snack:
-Dinner:
-One tip for their specific goal.
+FORMAT (plain text):
+${slotsToPlan.joinToString("\n") { "${it.replaceFirstChar { c -> c.uppercase() }}: ..." }}
+Tip: one tip for their goal.
 
 $outputRules
         """.trimIndent()
@@ -244,33 +269,44 @@ $outputRules
 
     /**
      * For the Dashboard weekly summary card.
-     * Analyses last 7 days of logged meals for trends and gives actionable advice.
+     * Analyses the last 7 days of logged meals for trends and gives actionable advice.
      */
     fun buildWeeklyInsightPrompt(
         historicalMeals: List<LoggedMeal>,
         profile: UserProfile
     ): String {
-        val recentMeals = historicalMeals.takeLast(50)
-        val avgCalories = if (recentMeals.isNotEmpty()) recentMeals.map { it.calories }.average().toInt() else 0
-        val avgProtein = if (recentMeals.isNotEmpty()) recentMeals.map { it.protein }.average().toInt() else 0
-        val uniqueFoods = recentMeals.map { it.foodName }.distinct().take(10).joinToString(", ")
+        val weekAgo = System.currentTimeMillis() - 7L * 86_400_000L
+        val recentMeals = historicalMeals.filter { it.date >= weekAgo }
+        val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val byDay = recentMeals.groupBy { dayFmt.format(it.date) }
+        val daysLogged = byDay.size
+        // Averages are per logged day (previously these were per meal, which understated intake ~3x).
+        val avgCalories = if (daysLogged > 0) byDay.values.map { d -> d.sumOf { it.calories.toDouble() } }.average().toInt() else 0
+        val avgProtein = if (daysLogged > 0) byDay.values.map { d -> d.sumOf { it.protein.toDouble() } }.average().toInt() else 0
+        val avgFiber = if (daysLogged > 0) byDay.values.map { d -> d.sumOf { it.fiber.toDouble() } }.average().toInt() else 0
+        val topFoods = recentMeals.groupingBy { it.foodName }.eachCount().entries
+            .sortedByDescending { it.value }.take(10).joinToString(", ") { "${it.key} x${it.value}" }
 
         return """
-You are an expert nutritionist reviewing this user's eating habits from the past 7 days.
-Give a warm, honest 4-5 sentence summary: (1) What are they doing well? (2) What is the biggest area to improve? (3) One specific, actionable recommendation for next week.
+You are NutriBot reviewing this user's eating over the past 7 days.
+Give a warm, honest 4-5 sentence summary: (1) what they are doing well, (2) the biggest thing to improve, (3) one specific, actionable change for next week.
 
 USER PROFILE:
-- Goal: ${profile.primaryGoal}
+- Goal: ${profile.primaryGoal} (${goalLabel(profile.primaryGoal)})
 - Diet: ${profile.dietType}
-- Daily calorie target: ${profile.dailyCalories?.toInt() ?: 2000} kcal
-- Daily protein target: ${profile.dailyProtein?.toInt() ?: 50}g
+- Health conditions: ${profile.healthTags.joinToString(", ").ifBlank { "none" }}
+- Daily targets: ${profile.dailyCalories?.toInt() ?: 2000} kcal, ${profile.dailyProtein?.toInt() ?: 50} g protein, ${profile.dailyFiber?.toInt() ?: 30} g fiber
 
-LAST 7 DAYS DATA:
-- Average daily calories logged: $avgCalories kcal
-- Average daily protein: ${avgProtein}g
-- Foods eaten: $uniqueFoods
+LAST 7 DAYS:
+- Days with any food logged: $daysLogged of 7
+- Average per logged day: $avgCalories kcal, $avgProtein g protein, $avgFiber g fiber
+- Most frequent foods: ${topFoods.ifBlank { "none logged" }}
+${if (daysLogged < 3) "- Note: few days logged, so treat trends as tentative and encourage consistent logging." else ""}
 
 $outputRules
         """.trimIndent()
     }
+
+    private fun today(): String =
+        SimpleDateFormat("EEEE, d MMMM", Locale.US).format(Calendar.getInstance().time)
 }

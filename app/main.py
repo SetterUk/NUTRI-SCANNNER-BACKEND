@@ -12,6 +12,7 @@ if sys.platform == 'win32':
 
 from app.api.routes import router as api_router
 from app.api.users import router as users_router
+from app.api.tracking import router as tracking_router
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from slowapi import _rate_limit_exceeded_handler
@@ -62,6 +63,7 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 app.include_router(users_router, prefix="/api/users", tags=["users"])
+app.include_router(tracking_router, prefix="/api/tracking", tags=["tracking"])
 
 # Mount static files
 os.makedirs(os.path.join("app", "static", "images"), exist_ok=True)

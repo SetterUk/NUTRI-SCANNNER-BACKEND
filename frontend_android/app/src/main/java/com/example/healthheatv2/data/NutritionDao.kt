@@ -48,6 +48,9 @@ interface NutritionDao {
     @Query("SELECT * FROM IFCTFood")
     suspend fun getAllIFCTFoods(): List<IFCTFood>
 
+    @Query("SELECT COUNT(*) FROM IFCTFood")
+    suspend fun countIFCTFoods(): Int
+
     @Query("SELECT * FROM IFCTFood ORDER BY RANDOM() LIMIT 500")
     suspend fun getSampleIFCTFoods(): List<IFCTFood>
 

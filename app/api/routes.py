@@ -3,8 +3,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
-from app.models.products import Product, UserAddedProduct
-from app.services.openfoodfacts import get_product_from_api
+from app.models.products import Product, UserAddedProduct, PersonalizedAnalysis
+from app.services.openfoodfacts import OFFUnavailable, get_product_from_api
+from app.services.alternatives import ALTERNATIVES_VERSION, find_alternatives, filter_for_user
+from app.services.personal import personal_alerts, apply_personal_alerts
+from app.services.scoring import compute_health_score, extract_allergens
 from app.models.schemas import ProductResponse, ReportMissingRequest, ManualProductRequest, UserRegister, UserLogin, ContributeProductRequest
 from app.api.deps import create_access_token, get_current_user, get_password_hash, verify_password, get_current_user_optional
 from app.models.users import User, UserProfile, UserScan
@@ -17,10 +20,14 @@ from typing import List
 
 # --- 1. IMPORT THE LANGGRAPH WORKFLOW ---
 from app.agents.workflow import nutrition_app_workflow
+import asyncio
 import logging
 import base64
+import hashlib
+import json
 import os
 import time
+from datetime import datetime, timedelta
 from fastapi import Request
 from app.core.limiter import limiter
 
@@ -141,7 +148,6 @@ async def scan_product(
     session: AsyncSession = Depends(get_session),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    print(f"DEBUG: Received scan request for {barcode}")
     # Fetch user profile for personalization if user is authenticated
     profile = None
     if current_user:
@@ -159,57 +165,196 @@ async def scan_product(
     if not product:
         # 2. FETCH EXTERNAL DATA IF NOT IN CACHE
         logger.info(f"Fetching from OFF API for {barcode}")
-        raw_data = await get_product_from_api(barcode)
+        try:
+            raw_data = await get_product_from_api(barcode)
+        except OFFUnavailable:
+            raise HTTPException(status_code=503, detail="The product database is busy. Please try again in a moment.")
         logger.info(f"OFF API response received for {barcode}")
         if not raw_data:
             raise HTTPException(status_code=404, detail="Product not found in global database.")
 
-        ingredients_list = raw_data.get("ingredients_tags", [])
-        if not ingredients_list:
-            ingredients_list = ["Unknown Ingredients"]
-
-        product = Product(
-            barcode=barcode,
-            name=raw_data.get("name", "Unknown"),
-            brand=raw_data.get("brand"),
-            image_url=raw_data.get("image_url"),
-            quantity=raw_data.get("quantity", ""),
-            ingredients_text=raw_data.get("ingredients_text", ""),
-            nutrients=raw_data.get("nutrients", {}), 
-            nova_group=raw_data.get("nova_group"),
-            nova_tags=raw_data.get("nova_tags") or [],
-            source="OFF",
-            ingredients=ingredients_list,
-            nutri_score=raw_data.get("nutri_score"),
-            categories=raw_data.get("categories"), 
-            countries=raw_data.get("countries"),
-            allergens=raw_data.get("allergens"),
-            additives_tags=raw_data.get("additives_tags") or [],
-            serving_size=raw_data.get("serving_size"),
-            ecoscore_grade=raw_data.get("ecoscore_grade"),
-            nutrient_levels=raw_data.get("nutrient_levels", {}),
-            packaging=raw_data.get("packaging"),
-        )
+        product = Product(barcode=barcode, name=raw_data.get("name") or "Unknown", source="OFF", ingredients=[])
+        _apply_off_data(product, raw_data)
         session.add(product)
     else:
         product.scan_count += 1
+        # Rows analysed before v3 stored only the broadest category, which skewed their scores.
+        # Refresh them from OFF once; if OFF is down, carry on with what we have.
+        if product.source == "OFF" and (product.analysis_version or 0) < GENERIC_ANALYSIS_VERSION:
+            try:
+                raw_data = await get_product_from_api(barcode, retries=0)
+            except OFFUnavailable:
+                raw_data = None
+            if raw_data:
+                _apply_off_data(product, raw_data)
         session.add(product)
 
-    # 3. USE CACHED AI ANALYSIS IF AVAILABLE
-    if product.health_score is not None:
-        logger.info(f"Serving cached AI analysis for barcode {barcode}")
-        await session.commit()
-        await session.refresh(product)
-        return product.model_dump()
+    # 3. ANALYSIS: generic results are cached on the product and shared; personalized results are
+    #    cached per user and only reused while that user's profile (and the analysis version) is
+    #    unchanged. Never cache personalized output on Product.
+    profile_ctx = _profile_context(profile)
+    personalized = any(v for v in profile_ctx.values())
 
-    # --- 4. RUN PERSONALIZED AGENTIC WORKFLOW ---
-    logger.info(f"Running agent workflow for barcode {barcode}")
+    agent_output = None
+    cached_personal = None
+    profile_hash = None
+    if personalized:
+        profile_hash = hashlib.sha256(json.dumps(
+            {"analysis_version": GENERIC_ANALYSIS_VERSION, **profile_ctx}, sort_keys=True, default=str
+        ).encode()).hexdigest()
+        cached_stmt = select(PersonalizedAnalysis).where(
+            PersonalizedAnalysis.user_id == current_user.id,
+            PersonalizedAnalysis.barcode == barcode,
+        )
+        cached_personal = (await session.execute(cached_stmt)).scalars().first()
+        if cached_personal and cached_personal.profile_hash == profile_hash:
+            logger.info(f"Serving cached personalized analysis for user {current_user.id}, barcode {barcode}")
+            agent_output = cached_personal.payload
+    elif product.health_score is not None and (product.analysis_version or 0) >= GENERIC_ANALYSIS_VERSION:
+        logger.info(f"Serving cached generic analysis for barcode {barcode}")
+        agent_output = {k: getattr(product, k) for k in ANALYSIS_FIELDS}
+
+    # Run the LLM analysis and the alternatives search concurrently; both are network-bound.
+    analysis_coro = _run_analysis(product, profile_ctx if personalized else {}) if agent_output is None else None
+    alternatives_coro = _refresh_alternatives(product) if _alternatives_stale(product) else None
+    results = await asyncio.gather(*(c for c in (analysis_coro, alternatives_coro) if c is not None))
+    if analysis_coro is not None:
+        agent_output = results[0]
+    if alternatives_coro is not None:
+        alts = results[-1]
+        if alts is not None:
+            product.alternatives = alts
+            product.alternatives_version = ALTERNATIVES_VERSION
+            product.alternatives_updated_at = datetime.utcnow()
+
+    if analysis_coro is not None:
+        if agent_output is not None:
+            if personalized:
+                if cached_personal:
+                    cached_personal.profile_hash = profile_hash
+                    cached_personal.payload = agent_output
+                    cached_personal.created_at = datetime.utcnow()
+                    session.add(cached_personal)
+                else:
+                    session.add(PersonalizedAnalysis(
+                        user_id=current_user.id, barcode=barcode,
+                        profile_hash=profile_hash, payload=agent_output,
+                    ))
+            else:
+                for k in ANALYSIS_FIELDS:
+                    setattr(product, k, agent_output.get(k))
+                product.analysis_version = GENERIC_ANALYSIS_VERSION
+        else:
+            agent_output = {
+                "verdict": None,
+                "health_score": None,
+                "summary": "We couldn't analyse this product right now. Please try again in a moment.",
+                "ingredients_analysis": [],
+            }
+
+    await session.commit()
+    await session.refresh(product)
+
+    # 4. LOG THE SCAN FOR THE USER
+    if current_user:
+        session.add(UserScan(user_id=current_user.id, barcode=barcode))
+        await session.commit()
+
+    # Build response: Product Data + (possibly personalized) Analysis + per-user safety checks
+    response_data = product.model_dump()
+    response_data.update(agent_output)
+    response_data["alternatives"] = filter_for_user(product.alternatives, profile_ctx)
+    if agent_output.get("health_score") is not None:
+        allergens = extract_allergens(product.ingredients_text or "", product.allergens)
+        alerts = personal_alerts(allergens, product.diet_tags, product.ingredients_text, profile_ctx)
+        response_data = apply_personal_alerts(response_data, alerts)
+    return response_data
+
+
+def _apply_off_data(product: Product, raw: dict) -> None:
+    product.name = raw.get("name") or product.name or "Unknown"
+    product.brand = raw.get("brand")
+    product.image_url = raw.get("image_url") or product.image_url
+    product.quantity = raw.get("quantity", "")
+    product.ingredients_text = raw.get("ingredients_text", "")
+    product.ingredients = raw.get("ingredients_tags") or ["Unknown Ingredients"]
+    product.nutrients = raw.get("nutrients", {})
+    product.nova_group = raw.get("nova_group")
+    product.nova_tags = raw.get("nova_tags") or []
+    product.nutri_score = raw.get("nutri_score")
+    product.categories = raw.get("categories")
+    product.food_groups = raw.get("food_groups") or []
+    product.diet_tags = raw.get("diet_tags") or []
+    product.countries = raw.get("countries")
+    product.allergens = raw.get("allergens")
+    product.additives_tags = raw.get("additives_tags") or []
+    product.serving_size = raw.get("serving_size")
+    product.ecoscore_grade = raw.get("ecoscore_grade")
+    product.nutrient_levels = raw.get("nutrient_levels", {})
+    product.packaging = raw.get("packaging")
+    product.updated_at = datetime.utcnow()
+
+
+def _alternatives_stale(product: Product) -> bool:
+    if product.source != "OFF" or not product.categories:
+        return False
+    if (product.alternatives_version or 0) < ALTERNATIVES_VERSION or product.alternatives is None:
+        return True
+    updated = product.alternatives_updated_at
+    return updated is None or datetime.utcnow() - updated > timedelta(days=30)
+
+
+async def _refresh_alternatives(product: Product) -> Optional[list]:
+    """None means the search failed (keep what we had); [] means nothing better exists."""
+    try:
+        current = compute_health_score(
+            nutrients=product.nutrients or {}, nova_group=product.nova_group,
+            nutri_score=product.nutri_score, additives_tags=product.additives_tags or [],
+            nutrient_levels=product.nutrient_levels or {}, ingredients=product.ingredients or [],
+            ingredients_text=product.ingredients_text or "", categories=product.categories,
+            serving_size=product.serving_size, product_name=product.name,
+            food_groups=product.food_groups or [], off_allergens=product.allergens,
+        )
+        return await find_alternatives(product, current.health_score)
+    except Exception as e:
+        logger.warning(f"Alternatives lookup failed for {product.barcode}: {e}")
+        return None
+
+
+ANALYSIS_FIELDS = [
+    "verdict", "is_good_for_health", "health_reason", "health_scale",
+    "safe_consumption_frequency", "health_score", "summary",
+    "ingredients_analysis", "nutrition_analysis", "score_breakdown",
+]
+GENERIC_ANALYSIS_VERSION = 3
+
+
+def _profile_context(profile: Optional[UserProfile]) -> dict:
+    if not profile:
+        return {}
+    return {
+        "age": profile.age,
+        "weight_kg": profile.weight_kg,
+        "height": profile.height,
+        "gender": profile.gender,
+        "activity_level": profile.activity_level,
+        "dietary_preferences": profile.dietary_preferences,
+        "health_tags": profile.health_tags or [],
+        "allergies": profile.allergies or [],
+        "health_goals": profile.health_goals,
+    }
+
+
+async def _run_analysis(product: Product, profile_ctx: dict) -> Optional[dict]:
+    """Runs the LangGraph workflow. Returns None on failure (never cache a failed analysis)."""
     initial_state = {
-        "barcode": barcode,
+        "barcode": product.barcode,
         "product_name": product.name,
         "ingredients": product.ingredients,
         "ingredients_text": product.ingredients_text or "",
         "category_tag": product.categories or "",
+        "food_groups": product.food_groups or [],
+        "off_allergens": product.allergens,
         "is_food": True,
         "analysis_result": None,
         "final_response": {},
@@ -221,61 +366,18 @@ async def scan_product(
         "serving_size": product.serving_size,
         "nutrients": product.nutrients or {},
         "scoring_result": None,
-        # PERSONALIZATION CONTEXT
-        "user_profile": {
-            "age": profile.age if profile else None,
-            "weight_kg": profile.weight_kg if profile else None,
-            "height": profile.height if profile else None,
-            "gender": profile.gender if profile else None,
-            "activity_level": profile.activity_level if profile else None,
-            "dietary_preferences": profile.dietary_preferences if profile else None,
-            "health_tags": profile.health_tags if profile else [],
-            "allergies": profile.allergies if profile else [],
-            "health_goals": profile.health_goals if profile else None
-        }
+        "user_profile": profile_ctx or None,
     }
-
     try:
-        logger.info("Calling nutrition_app_workflow")
         final_state = await nutrition_app_workflow.ainvoke(initial_state)
-        logger.info("Workflow completed")
-        agent_output = final_state.get("final_response", {})
-        
-        # Save AI output to product cache
-        product.verdict = agent_output.get("verdict")
-        product.is_good_for_health = agent_output.get("is_good_for_health")
-        product.health_reason = agent_output.get("health_reason")
-        product.health_scale = agent_output.get("health_scale")
-        product.safe_consumption_frequency = agent_output.get("safe_consumption_frequency")
-        product.health_score = agent_output.get("health_score")
-        product.summary = agent_output.get("summary")
-        product.ingredients_analysis = agent_output.get("ingredients_analysis", [])
-        product.nutrition_analysis = agent_output.get("nutrition_analysis", {})
-        
-    except Exception as e:
-        logger.error(f"Agent Workflow Failed for {barcode}: {e}", exc_info=True)
-        agent_output = {
-            "verdict": "PASS",
-            "health_score": 0,
-            "summary": "Analysis failed.",
-            "ingredients_analysis": []
+        output = final_state.get("final_response") or {}
+        return {k: output.get(k) for k in ANALYSIS_FIELDS} | {
+            k: v for k, v in output.items() if k not in ANALYSIS_FIELDS
         }
+    except Exception as e:
+        logger.error(f"Agent Workflow Failed for {product.barcode}: {e}", exc_info=True)
+        return None
 
-    await session.commit()
-    await session.refresh(product)
-
-    # 5. LOG THE SCAN FOR THE USER
-    if current_user:
-        # Check if they already scanned this recently (optional, but let's just log it)
-        user_scan = UserScan(user_id=current_user.id, barcode=barcode)
-        session.add(user_scan)
-        await session.commit()
-
-    # Build response: Product Data + Personalized Analysis
-    response_data = product.model_dump()
-    response_data.update(agent_output)
-    
-    return response_data
 
 @router.get("/scan/history", response_model=List[ProductResponse])
 async def get_scan_history(
@@ -291,24 +393,16 @@ async def get_scan_history(
     # Fetch the latest 50 distinct scans for the user
     # Note: A real app might group by barcode or distinct, but this is simple history
     statement = (
-        select(Product)
+        select(Product, UserScan.scanned_at)
         .join(UserScan, UserScan.barcode == Product.barcode)
         .where(UserScan.user_id == current_user.id)
         .order_by(UserScan.scanned_at.desc())
-        .limit(50)
+        .limit(200)
     )
     result = await session.execute(statement)
-    products = result.scalars().all()
+    products = result.all()
     
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_products = []
-    for p in products:
-        if p.barcode not in seen:
-            seen.add(p.barcode)
-            unique_products.append(p)
-
-    return unique_products
+    return _history_rows(products, limit=50)
 
 @router.post("/report-missing")
 async def report_missing_product(
@@ -371,6 +465,8 @@ async def contribute_to_product(
         product.nutrition_analysis = {}
         
     # Handle Image Upload
+    if data.image_base64 and len(data.image_base64) > 7_000_000:
+        raise HTTPException(status_code=413, detail="Image too large (max ~5 MB).")
     if data.image_base64:
         try:
             # Create static/images directory if it doesn't exist
@@ -408,24 +504,32 @@ async def get_user_history(
     Returns the list of products previously scanned by the user, ordered by most recent.
     """
     statement = (
-        select(Product)
+        select(Product, UserScan.scanned_at)
         .join(UserScan, UserScan.barcode == Product.barcode)
         .where(UserScan.user_id == current_user.id)
         .order_by(UserScan.scanned_at.desc())
     )
     result = await session.execute(statement)
-    # Use unique() since a user might scan the same product multiple times
-    products = result.scalars().unique().all()
+    products = result.all()
     
-    # We might have duplicates if they scanned multiple times, let's keep only unique products while preserving order
-    seen = set()
-    unique_products = []
-    for p in products:
-        if p.barcode not in seen:
-            seen.add(p.barcode)
-            unique_products.append(p)
+    return _history_rows(products)
 
-    return unique_products
+
+def _history_rows(product_scans, limit: Optional[int] = None) -> list:
+    """Unique products, newest scan first, from (Product, scanned_at) rows. Alternatives are left
+    out: they are only safe to show after per-user allergy filtering, which happens on scan."""
+    seen, rows = set(), []
+    for p, scanned_at in product_scans:
+        if p.barcode in seen:
+            continue
+        seen.add(p.barcode)
+        row = p.model_dump()
+        row["alternatives"] = []
+        row["scanned_at"] = scanned_at
+        rows.append(row)
+        if limit and len(rows) >= limit:
+            break
+    return rows
 
 @router.get("/profile")
 async def get_profile(
@@ -456,6 +560,7 @@ class ProfileUpdateRequest(BaseModel):
     weight_kg: Optional[float] = None
     gender: Optional[str] = None
     activity_level: Optional[str] = None
+    medical_reports: Optional[str] = None
 
 @router.put("/profile")
 async def update_profile(
@@ -492,6 +597,8 @@ async def update_profile(
         profile.gender = data.gender.strip() or None
     if data.activity_level is not None:
         profile.activity_level = data.activity_level.strip() or None
+    if data.medical_reports is not None:
+        profile.medical_reports = data.medical_reports.strip()[:20000] or None
 
     await session.commit()
     await session.refresh(profile)
@@ -508,16 +615,57 @@ class ChatRequest(BaseModel):
 @limiter.limit("20/minute")
 async def chat_with_nutritionist(
     request: Request,
-    data: ChatRequest
+    data: ChatRequest,
+    current_user: User = Depends(get_current_user)
 ):
     from app.core.groq_manager import groq_manager
     client = groq_manager.get_best_client()
     try:
+        allowed_roles = {"system", "user", "assistant"}
+        raw_messages = [
+            {"role": m.role, "content": m.content[:8000]}
+            for m in data.messages[-24:]
+            if m.role in allowed_roles
+        ]
+        # Reinforce system prompt if present or inject supportive guidance
+        has_system = any(m["role"] == "system" for m in raw_messages)
+        if not has_system:
+            raw_messages.insert(0, {
+                "role": "system",
+                "content": (
+                    "You are NutriBot, an expert culinary nutritionist and meal planning coach. "
+                    "Provide practical Indian meal plans, food swaps, and macro calculations based on ICMR/IFCT dietary guidelines. "
+                    "Always answer nutritional, dietary, and meal planning queries directly."
+                )
+            })
+
         response = await client.chat.completions.create(
             model="openai/gpt-oss-120b",
-            messages=[{"role": m.role, "content": m.content} for m in data.messages]
+            messages=raw_messages
         )
-        return {"response": response.choices[0].message.content}
+        content = response.choices[0].message.content or ""
+        return {"response": content}
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail="Error generating response")
+
+
+@router.delete("/account")
+async def delete_account(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Permanently deletes the user, their profile, scan history, meal and weight logs, and
+    personalized analyses."""
+    from sqlalchemy import delete as sa_delete
+    from app.models.tracking import MealEntry, WeightEntry
+    uid = current_user.id
+    await session.execute(sa_delete(MealEntry).where(MealEntry.user_id == uid))
+    await session.execute(sa_delete(WeightEntry).where(WeightEntry.user_id == uid))
+    await session.execute(sa_delete(PersonalizedAnalysis).where(PersonalizedAnalysis.user_id == uid))
+    await session.execute(sa_delete(UserScan).where(UserScan.user_id == uid))
+    await session.execute(sa_delete(UserProfile).where(UserProfile.user_id == uid))
+    await session.execute(sa_delete(User).where(User.id == uid))
+    await session.commit()
+    logger.info(f"Deleted account {uid}")
+    return {"status": "deleted"}

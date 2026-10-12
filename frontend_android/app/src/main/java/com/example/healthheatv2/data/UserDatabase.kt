@@ -5,7 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import kotlinx.coroutines.launch
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -28,10 +29,11 @@ import kotlinx.coroutines.launch
         MealTemplate::class,
         MealItem::class,
         SavedChatMessage::class,
-        SavedDailyPlan::class
+        SavedDailyPlan::class,
+        WeightLog::class
     ],
-    version = 9,
-    exportSchema = false
+    version = 11,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class UserDatabase : RoomDatabase() {
@@ -39,10 +41,50 @@ abstract class UserDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
     abstract fun mealLogDao(): MealLogDao
     abstract fun nutritionDao(): NutritionDao
+    abstract fun weightLogDao(): WeightLogDao
 
     companion object {
         @Volatile
         private var INSTANCE: UserDatabase? = null
+
+        /** Tables holding one person's data; wiped when a different account signs in on this phone. */
+        val PERSONAL_TABLES = listOf(
+            "scanned_products", "meal_logs", "weight_logs", "user_profiles", "SavedChatMessage", "SavedDailyPlan"
+        )
+
+        /**
+         * v9 -> v10: meal_logs gains isEstimated + a date index; user_profiles gains missingFields.
+         * Every schema change from here on needs a Migration: users' meal history and
+         * chat live in this database, and a destructive fallback would erase them on update.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN isEstimated INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_meal_logs_date ON meal_logs (date)")
+                db.execSQL("ALTER TABLE user_profiles ADD COLUMN missingFields TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
+        /**
+         * v10 -> v11: meal logs sync to the account. Each meal gets a stable random id, a dirty flag
+         * (existing meals start dirty so they upload once) and soft deletion; weight_logs is new.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN clientId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE meal_logs SET clientId = lower(hex(randomblob(16))) WHERE clientId = ''")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_meal_logs_clientId` ON `meal_logs` (`clientId`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `weight_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`measuredAt` INTEGER NOT NULL, `weightKg` REAL NOT NULL, `clientId` TEXT NOT NULL, " +
+                        "`dirty` INTEGER NOT NULL, `deleted` INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_weight_logs_clientId` ON `weight_logs` (`clientId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_weight_logs_measuredAt` ON `weight_logs` (`measuredAt`)")
+            }
+        }
 
         fun getDatabase(context: Context): UserDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -51,91 +93,12 @@ abstract class UserDatabase : RoomDatabase() {
                     UserDatabase::class.java,
                     "healthheat_user_database"
                 )
-                .fallbackToDestructiveMigration()
-                .addCallback(DatabaseCallback(context))
+                .addMigrations(MIGRATION_9_10, MIGRATION_10_11)
+                // Only pre-release development schemas may be wiped.
+                .fallbackToDestructiveMigrationFrom(true, 1, 2, 3, 4, 5, 6, 7, 8)
                 .build()
                 INSTANCE = instance
                 instance
-            }
-        }
-    }
-
-    private class DatabaseCallback(
-        private val context: Context
-    ) : RoomDatabase.Callback() {
-        override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-            super.onCreate(db)
-            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                val dao = getDatabase(context).nutritionDao()
-                
-                // Seed ICMR Medical Rules from JSON
-                try {
-                    val icmrStream = context.assets.open("icmr_rules.json")
-                    val icmrString = icmrStream.bufferedReader().use { it.readText() }
-                    val icmrArray = org.json.JSONObject(icmrString).getJSONArray("rules")
-                    for (i in 0 until icmrArray.length()) {
-                        val rule = icmrArray.getJSONObject(i)
-                        dao.insertICMRRule(
-                            ICMRRule(
-                                id = rule.getString("id"),
-                                condition_tag = rule.getString("condition_tag"),
-                                clinical_focus = rule.getString("clinical_focus"),
-                                must_avoid = rule.getString("must_avoid"),
-                                recommended_swaps = rule.getString("recommended_swaps"),
-                                required_tags = rule.getString("required_tags"),
-                                banned_tags = rule.getString("banned_tags")
-                            )
-                        )
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                
-                try {
-                    val inputStream = context.assets.open("indian_foods.json")
-                    val jsonString = inputStream.bufferedReader().use { it.readText() }
-                    val jsonObject = org.json.JSONObject(jsonString)
-                    val foodsArray = jsonObject.getJSONArray("foods")
-                    val ifctFoods = mutableListOf<IFCTFood>()
-                    
-                    for (i in 0 until foodsArray.length()) {
-                        val food = foodsArray.getJSONObject(i)
-                        val id = food.getString("id")
-                        val name = food.getString("name")
-                        val serving = food.getInt("serving_size_g").toString() + "g"
-                        val macros = food.getJSONObject("macros")
-                        val energy = macros.getDouble("calories").toFloat()
-                        val protein = macros.getDouble("protein").toFloat()
-                        val carbs = macros.getDouble("carbs").toFloat()
-                        val fat = macros.optDouble("fat", 0.0).toFloat()
-                        val fiber = macros.optDouble("fiber", 0.0).toFloat()
-                        
-                        val micros = food.optJSONObject("micros") ?: org.json.JSONObject()
-                        val iron = micros.optDouble("iron_mg", 0.0).toFloat()
-                        val calcium = micros.optDouble("calcium_mg", 0.0).toFloat()
-                        val zinc = micros.optDouble("zinc_mg", 0.0).toFloat()
-                        val b12 = micros.optDouble("b12_mcg", 0.0).toFloat()
-                        val vitaminD = micros.optDouble("vitamin_d_iu", 0.0).toFloat()
-                        val folate = micros.optDouble("folate_mcg", 0.0).toFloat()
-                        
-                        val category = food.getString("category")
-                        val isVeg = if (food.getBoolean("veg")) "vegetarian" else "non-vegetarian"
-                        
-                        val aliasesArray = food.optJSONArray("aliases")
-                        val aliases = mutableListOf<String>()
-                        if (aliasesArray != null) {
-                            for (j in 0 until aliasesArray.length()) {
-                                aliases.add(aliasesArray.getString(j))
-                            }
-                        }
-                        val tags = listOf(category, isVeg) + aliases
-                        
-                        ifctFoods.add(IFCTFood(id, name, serving, energy, protein, carbs, fat, fiber, iron, calcium, zinc, b12, vitaminD, folate, tags.joinToString(",")))
-                    }
-                    dao.insertIFCTFoods(ifctFoods)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
             }
         }
     }

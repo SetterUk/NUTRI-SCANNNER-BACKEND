@@ -60,7 +60,11 @@ fun DashboardSc(
             .format(java.util.Date())
     }
 
-    LaunchedEffect(refreshTrigger) {
+    // Live list of today's meals; totals and gaps below recompute whenever it changes.
+    val todayMeals by remember(nutritionEngine) { nutritionEngine.observeTodayMeals() }
+        .collectAsState(initial = emptyList())
+
+    LaunchedEffect(refreshTrigger, todayMeals) {
         gaps = nutritionEngine.calculateGaps()
         intake = nutritionEngine.getTodayIntake()
         historicalMeals = nutritionEngine.getHistoricalMeals()
@@ -142,6 +146,14 @@ fun DashboardSc(
                 modifier = Modifier.weight(1f)
             )
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        com.example.healthheatv2.ui.components.TodayMealsCard(
+            meals = todayMeals,
+            onDelete = { meal -> scope.launch { nutritionEngine.deleteMeal(meal.id) } },
+            onAdd = { text -> describeLogResult(nutritionEngine.logFoodsFromText(text)) }
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -263,12 +275,8 @@ fun AiMealPlanCard(
                     }
                 }
                 planText != null -> {
-                    // Strip the tier prefix [⚡ [Gemma 4 E2B], ☁️ [Cloud AI], 🔋 [Offline]]
-                    val cleanPlan = planText
-                        .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
-                        .trim()
                     Text(
-                        text = cleanPlan,
+                        text = com.example.healthheatv2.ui.components.AiText.annotated(planText),
                         color = colors.textPrimary,
                         fontSize = 14.sp,
                         lineHeight = 22.sp

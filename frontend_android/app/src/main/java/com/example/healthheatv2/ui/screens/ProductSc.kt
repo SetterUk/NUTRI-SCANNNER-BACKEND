@@ -40,6 +40,8 @@ import com.example.healthheatv2.network.AlternativeProduct
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.network.IngredientAnalysis
 import com.example.healthheatv2.ui.components.UserProfileAvatar
+import com.example.healthheatv2.ui.components.ScoreTier
+import com.example.healthheatv2.ui.components.color
 import com.example.healthheatv2.ui.theme.AppColors
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.ApiState
@@ -89,11 +91,13 @@ fun ProductScreen(
     var capturedOcrText by remember { mutableStateOf("") }
     var isProcessingOCR by remember { mutableStateOf(false) }
 
-    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
     val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     var aiVerdictText by remember { mutableStateOf<String?>(null) }
     var aiVerdictLoading by remember { mutableStateOf(false) }
+    var isFoodLogged by remember { mutableStateOf(false) }
+    var selectedPortionGrams by remember { mutableStateOf(100f) }
+    var selectedMealSlot by remember { mutableStateOf("snack") }
     val scope = rememberCoroutineScope()
 
     when (captureState) {
@@ -138,10 +142,19 @@ fun ProductScreen(
     when (val state = apiState) {
         is ApiState.Success -> {
             val product = state.data
-            val score = product.healthScore ?: 0
-            val personalScore = nutritionEngine.calculatePersonalScore(score, product.ingredientsText, product.categories)
-            val isSmash = personalScore >= smashThreshold
-            val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
+            // One score and one verdict, both from the server. The verdict already includes this
+            // user's allergy/diet checks, so the app no longer adjusts the score on the phone.
+            val score = product.healthScore
+            val tier = ScoreTier.of(product.verdict, score)
+            val verdictColor = tier?.color() ?: colors.textSecondary
+            val alerts = product.personalAlerts.orEmpty()
+
+            // Tapping an alternative loads another product into this screen: start it fresh.
+            LaunchedEffect(product.barcode) {
+                scrollState.scrollToItem(0)
+                aiVerdictText = null
+                isFoodLogged = false
+            }
 
             Box(
             modifier = Modifier
@@ -172,14 +185,26 @@ fun ProductScreen(
                 }
 
                 // ── Verdict + Score row ───────────
-                val isNonFood = (product.healthScore == 0) && (product.isGoodForHealth == false) && (product.safeConsumptionFrequency == "Not applicable")
-                
+                val isNonFood = product.safeConsumptionFrequency == "Not applicable"
+                val analysisFailed = !isNonFood && score == null
+
+                if (alerts.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(20.dp))
+                        PersonalAlertBanner(alerts = alerts, modifier = Modifier.padding(horizontal = 20.dp))
+                    }
+                }
+
                 item {
                     Spacer(Modifier.height(20.dp))
-                    if (isNonFood) {
-                        NonFoodCard(modifier = Modifier.padding(horizontal = 20.dp))
-                    } else {
-                        Row(
+                    when {
+                        isNonFood -> NonFoodCard(modifier = Modifier.padding(horizontal = 20.dp))
+                        analysisFailed -> AnalysisFailedCard(
+                            message = product.summary,
+                            onRetry = { viewModel.lookupBarcode(viewModel.lastScannedBarcode) },
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
+                        else -> Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 20.dp),
@@ -188,17 +213,49 @@ fun ProductScreen(
                             VerdictCard(
                                 modifier = Modifier.weight(1.1f),
                                 product = product,
+                                tier = tier,
                                 verdictColor = verdictColor,
-                                isSmash = isSmash,
-                                generalScore = score,
-                                personalScore = personalScore
+                                hasAlerts = alerts.isNotEmpty()
                             )
                             ScoreGauge(
                                 modifier = Modifier.weight(0.9f),
-                                score = personalScore,
+                                score = score ?: 0,
+                                color = verdictColor,
                                 onClick = onViewDetails
                             )
                         }
+                    }
+                }
+
+                // ── Why this score ────────────────
+                val breakdown = product.scoreBreakdown
+                if (!isNonFood && !analysisFailed && breakdown != null &&
+                    (!breakdown.concerns.isNullOrEmpty() || !breakdown.positives.isNullOrEmpty())) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        WhyThisScoreCard(breakdown = breakdown, modifier = Modifier.padding(horizontal = 20.dp))
+                    }
+                }
+
+                // ── 1-Tap Log Food Card ───────────
+                if (!isNonFood && !analysisFailed) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        LogProductToTrackerCard(
+                            product = product,
+                            isLogged = isFoodLogged,
+                            selectedPortion = selectedPortionGrams,
+                            selectedSlot = selectedMealSlot,
+                            onPortionChange = { selectedPortionGrams = it },
+                            onSlotChange = { selectedMealSlot = it },
+                            onLogClick = {
+                                scope.launch {
+                                    nutritionEngine.logScannedProduct(product, selectedPortionGrams, selectedMealSlot)
+                                    isFoodLogged = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
                     }
                 }
 
@@ -214,12 +271,12 @@ fun ProductScreen(
                     )
                 }
 
-                // ── AI Summary (cloud) ────────────
+                // ── Summary ───────────────────────
                 val summary = product.summary
-                if (!summary.isNullOrEmpty()) {
+                if (!summary.isNullOrEmpty() && !analysisFailed) {
                     item {
                         Spacer(Modifier.height(24.dp))
-                        SectionTitle("AI Analysis", padding = 20.dp)
+                        SectionTitle("Summary", padding = 20.dp)
                         Spacer(Modifier.height(12.dp))
                         AISummaryCard(summary = summary)
                     }
@@ -312,18 +369,24 @@ fun ProductScreen(
                 }
 
                 // ── Alternatives ──────────────────
-                val alternatives = product.alternatives ?: emptyList()
+                val alternatives = product.alternatives.orEmpty().filter { !it.code.isNullOrBlank() }
                 if (alternatives.isNotEmpty()) {
                     item {
                         Spacer(Modifier.height(24.dp))
-                        SectionTitle("Better Alternatives", padding = 20.dp)
-                        Spacer(Modifier.height(12.dp))
+                        SectionTitle("Healthier picks", padding = 20.dp)
+                        Text(
+                            "Same kind of product, sold in India, rated higher. Tap one to see why.",
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                        )
+                        Spacer(Modifier.height(8.dp))
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(alternatives) { alt ->
-                                AlternativeCard(alt = alt)
+                                AlternativeCard(alt = alt, onClick = { viewModel.lookupBarcode(alt.code!!) })
                             }
                         }
                     }
@@ -369,6 +432,18 @@ fun ProductScreen(
                         }
                     }
                 }
+
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Ratings use Open Food Facts data and are general nutrition information, not medical advice.",
+                        color = colors.textHint,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+                    )
+                }
             }
 
             // ── Floating Scan Another Button ──────
@@ -407,8 +482,19 @@ fun ProductScreen(
         )
     }
     else -> {
-        Box(Modifier.fillMaxSize().background(colors.background), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.CircularProgressIndicator(color = colors.accentBlue)
+        val slow = (apiState as? ApiState.Loading)?.slow == true
+        Box(Modifier.fillMaxSize().background(colors.background).padding(32.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                androidx.compose.material3.CircularProgressIndicator(color = colors.accentGreen)
+                Text(
+                    if (slow) "Still working on it. The first scan after a quiet spell can take up to a minute while our server wakes up."
+                    else "Checking ingredients and nutrition…",
+                    color = colors.textSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
     }
 }
@@ -802,14 +888,16 @@ private fun ProductHero(
 private fun VerdictCard(
     modifier: Modifier,
     product: FoodResponse,
+    tier: ScoreTier?,
     verdictColor: Color,
-    isSmash: Boolean,
-    generalScore: Int,
-    personalScore: Int
+    hasAlerts: Boolean
 ) {
     val colors = LocalAppColors.current
-
-
+    val frequency = when {
+        hasAlerts -> "Not suitable for you"
+        !product.safeConsumptionFrequency.isNullOrBlank() -> product.safeConsumptionFrequency
+        else -> tier?.frequency
+    }
 
     Column(
         modifier = modifier
@@ -819,36 +907,26 @@ private fun VerdictCard(
             .padding(16.dp)
     ) {
         Text("VERDICT", color = colors.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
         Text(
-            text = if (isSmash) "FIT" else "AVOID",
+            text = tier?.label ?: "Not rated",
             color = verdictColor,
-            fontSize = 34.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.ExtraBold,
-            letterSpacing = (-1).sp
+            lineHeight = 28.sp,
+            letterSpacing = (-0.5).sp
         )
-        Spacer(Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(verdictColor.copy(alpha = 0.12f))
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Text(
-                "General Score: $generalScore", 
-                color = colors.textSecondary, 
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        if (personalScore < generalScore) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Personal Score: $personalScore (Flagged for allergies/diet)",
-                color = colors.accentRed,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
+        if (!frequency.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Filled.Schedule, contentDescription = null, tint = verdictColor, modifier = Modifier.size(12.dp))
+                Text(
+                    text = frequency,
+                    color = verdictColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
         if (!product.healthReason.isNullOrEmpty()) {
             Spacer(Modifier.height(10.dp))
@@ -857,21 +935,105 @@ private fun VerdictCard(
                 color = colors.textSecondary,
                 fontSize = 11.sp,
                 lineHeight = 15.sp,
-                maxLines = 3,
+                maxLines = 5,
                 overflow = TextOverflow.Ellipsis
             )
         }
-        if (!product.safeConsumptionFrequency.isNullOrEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(Icons.Filled.Schedule, contentDescription = null, tint = colors.accentAmber, modifier = Modifier.size(12.dp))
-                Text(
-                    text = product.safeConsumptionFrequency,
-                    color = colors.accentAmber,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+    }
+}
+
+@Composable
+private fun PersonalAlertBanner(alerts: List<String>, modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.accentRed.copy(alpha = 0.12f))
+            .border(1.dp, colors.accentRed.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = colors.accentRed, modifier = Modifier.size(22.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Not right for you", color = colors.accentRed, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            alerts.forEach { Text(it, color = colors.textPrimary, fontSize = 13.sp, lineHeight = 18.sp) }
+            Text(
+                "Based on the allergies and diet in your profile. Always check the pack label too.",
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun WhyThisScoreCard(breakdown: com.example.healthheatv2.network.ScoreBreakdown, modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.card)
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("Why this score", color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        breakdown.category?.let {
+            Text("Compared with other $it", color = colors.textSecondary, fontSize = 12.sp)
+        }
+        breakdown.concerns.orEmpty().forEach { ReasonRow(text = it, color = colors.accentRed, symbol = "−") }
+        breakdown.positives.orEmpty().forEach { ReasonRow(text = it, color = colors.accentGreen, symbol = "+") }
+        if ((breakdown.dataConfidence ?: 1.0) < 0.6) {
+            Text(
+                "Some information is missing for this product, so treat the score as an estimate.",
+                color = colors.accentAmber,
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReasonRow(text: String, color: Color, symbol: String) {
+    val colors = LocalAppColors.current
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            modifier = Modifier.size(20.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(symbol, color = color, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(text, color = colors.textPrimary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun AnalysisFailedCard(message: String?, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = LocalAppColors.current
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.card)
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("Couldn't rate this yet", color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(
+            message ?: "The analysis didn't finish. Please try again.",
+            color = colors.textSecondary,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        TextButton(onClick = onRetry) {
+            Text("Try again", color = colors.accentGreen, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -880,7 +1042,7 @@ private fun VerdictCard(
 //  Score Gauge
 // ─────────────────────────────────────────────────
 @Composable
-private fun ScoreGauge(modifier: Modifier, score: Int, onClick: () -> Unit) {
+private fun ScoreGauge(modifier: Modifier, score: Int, color: Color, onClick: () -> Unit) {
     val colors = LocalAppColors.current
 
     val animatedScore = remember { Animatable(0f) }
@@ -890,11 +1052,7 @@ private fun ScoreGauge(modifier: Modifier, score: Int, onClick: () -> Unit) {
             animationSpec = tween(1200, easing = FastOutSlowInEasing)
         )
     }
-    val scoreColor = when {
-        score >= 70 -> colors.accentGreen
-        score >= 40 -> colors.accentAmber
-        else -> colors.accentRed
-    }
+    val scoreColor = color
 
 
 
@@ -1186,7 +1344,7 @@ private fun AISummaryCard(summary: String) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = colors.accentAmber, modifier = Modifier.size(16.dp))
-            Text("AI Insight", color = colors.accentAmber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("In short", color = colors.accentAmber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(10.dp))
         Text(summary, color = colors.textPrimary, fontSize = 13.sp, lineHeight = 20.sp)
@@ -1298,16 +1456,18 @@ private fun IngredientRow(ingredient: IngredientAnalysis, index: Int) {
 //  Alternative Card
 // ─────────────────────────────────────────────────
 @Composable
-private fun AlternativeCard(alt: AlternativeProduct) {
+private fun AlternativeCard(alt: AlternativeProduct, onClick: () -> Unit) {
     val colors = LocalAppColors.current
-    val scoreColor = nutriScoreColor(alt.nutriScore?.uppercase() ?: "?", colors)
+    val tier = ScoreTier.of(alt.verdict, alt.healthScore)
+    val scoreColor = tier?.color() ?: colors.textSecondary
 
     Column(
         modifier = Modifier
-            .width(130.dp)
+            .width(150.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(colors.card)
-            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .border(1.dp, scoreColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+            .clickable { onClick() }
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1344,15 +1504,21 @@ private fun AlternativeCard(alt: AlternativeProduct) {
                 }
             )
         }
-        Text(alt.name ?: "Product", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, lineHeight = 16.sp)
-        Text(alt.brand ?: "", color = colors.textSecondary, fontSize = 11.sp, maxLines = 1)
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(scoreColor.copy(alpha = 0.12f))
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        ) {
-            Text(alt.nutriScore?.uppercase() ?: "?", color = scoreColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+        Text(alt.name ?: "Product", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, lineHeight = 16.sp, overflow = TextOverflow.Ellipsis)
+        Text(alt.brand ?: "", color = colors.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(scoreColor.copy(alpha = 0.12f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text("${alt.healthScore ?: "?"}", color = scoreColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            Text(tier?.label ?: "", color = scoreColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+        alt.whyBetter.orEmpty().takeIf { it.isNotEmpty() }?.let { reasons ->
+            Text(reasons.joinToString(" · "), color = colors.textSecondary, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2)
         }
     }
 }
@@ -1521,11 +1687,8 @@ fun AiPersonalVerdictCard(
                     }
                 }
                 verdictText != null -> {
-                    val cleanVerdict = verdictText
-                        .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
-                        .trim()
                     Text(
-                        text = cleanVerdict,
+                        text = com.example.healthheatv2.ui.components.AiText.annotated(verdictText),
                         color = colors.textPrimary,
                         fontSize = 14.sp,
                         lineHeight = 21.sp
@@ -1550,6 +1713,146 @@ fun AiPersonalVerdictCard(
                         Text("Ask AI — Is This Good For Me?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun LogProductToTrackerCard(
+    product: com.example.healthheatv2.network.FoodResponse,
+    isLogged: Boolean,
+    selectedPortion: Float,
+    selectedSlot: String,
+    onPortionChange: (Float) -> Unit,
+    onSlotChange: (String) -> Unit,
+    onLogClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalAppColors.current
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = colors.card,
+        border = BorderStroke(1.dp, if (isLogged) colors.accentGreen else colors.border),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (isLogged) "✅" else "🍽️", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isLogged) "Logged to Today's Diary" else "Log to Food Tracker",
+                            color = colors.textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = if (isLogged) "Nutrition calculated & saved to daily goals" else "Track this food against your daily calorie targets",
+                        color = colors.textHint,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            if (!isLogged) {
+                Spacer(modifier = Modifier.height(14.dp))
+                
+                // Meal Slot Pills
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("breakfast", "lunch", "snack", "dinner").forEach { slot ->
+                        val isSelected = selectedSlot == slot
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) colors.accentGreen.copy(alpha = 0.2f) else colors.background,
+                            border = BorderStroke(1.dp, if (isSelected) colors.accentGreen else colors.border),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onSlotChange(slot) }
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = slot.replaceFirstChar { it.uppercase() },
+                                    color = if (isSelected) colors.accentGreen else colors.textSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Portion Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(50f to "50g", 100f to "100g", 150f to "150g", 200f to "200g").forEach { (portion, label) ->
+                        val isSelected = selectedPortion == portion
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) colors.accentGreen.copy(alpha = 0.2f) else colors.background,
+                            border = BorderStroke(1.dp, if (isSelected) colors.accentGreen else colors.border),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onPortionChange(portion) }
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) colors.accentGreen else colors.textSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                androidx.compose.material3.Button(
+                    onClick = onLogClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = CircleShape,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = colors.accentGreen
+                    )
+                ) {
+                    Text(
+                        text = "+ Log ${selectedPortion.toInt()}g to ${selectedSlot.replaceFirstChar { it.uppercase() }}",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Added to your daily macros! Check the Dashboard to see your live updated calorie & protein targets.",
+                    color = colors.accentGreen,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
             }
         }
     }

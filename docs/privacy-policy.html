@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HealthHeat Privacy Policy</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #5f6368; --accent: #1e8e3e; --line: #e5e5e5; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #f2f2f2; --muted: #a0a0a0; --accent: #2ecc71; --line: #2a2a2a; } }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin-bottom: 4px; } h2 { font-size: 20px; margin-top: 32px; border-top: 1px solid var(--line); padding-top: 24px; }
+  .muted { color: var(--muted); } a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; } td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .note { background: rgba(30,142,62,.08); border: 1px solid rgba(30,142,62,.3); border-radius: 10px; padding: 12px 16px; }
+</style>
+</head>
+<body>
+<main>
+<!-- Before publishing: replace [DEVELOPER NAME] and [CONTACT EMAIL], and confirm every row still matches the app. -->
+<h1>HealthHeat Privacy Policy</h1>
+<p class="muted">Last updated: 12 October 2026</p>
+
+<p>HealthHeat ("the app") is published by [DEVELOPER NAME] ("we"). This policy explains what the app collects, why, who it is shared with, and how to delete it. Contact: <a href="mailto:[CONTACT EMAIL]">[CONTACT EMAIL]</a>.</p>
+
+<p class="note">HealthHeat gives general nutrition information. It is not a medical device and does not diagnose or treat any condition. We do not sell your data and do not use it for advertising.</p>
+
+<h2>What we collect and why</h2>
+<table>
+  <tr><th>Data</th><th>Why</th><th>Where it is stored</th></tr>
+  <tr><td>Name, email address and Google account ID (from Google sign-in)</td><td>To create your account and keep your data with it</td><td>Our server; Google Firebase Authentication</td></tr>
+  <tr><td>Profile: age, sex, height, weight, activity level, diet, goals, allergies, health conditions, and any medical notes you choose to type or extract from a PDF</td><td>To calculate your daily targets, check products against your allergies and diet, and personalise advice</td><td>Our server and your phone</td></tr>
+  <tr><td>Meal logs and weight entries</td><td>To show your daily progress and weekly trends, and to restore them on a new phone</td><td>Our server and your phone</td></tr>
+  <tr><td>Barcodes you scan and your scan history</td><td>To rate products and show your history</td><td>Our server and your phone</td></tr>
+  <tr><td>Product photos and ingredient text you contribute for missing products</td><td>To add the product so it can be rated. Contributed product details are shown to other users; do not include personal information in them.</td><td>Our server</td></tr>
+  <tr><td>Messages you send to NutriBot</td><td>To answer you. Chat history is kept on your phone only.</td><td>Your phone; processed by our server and our AI provider (see below)</td></tr>
+  <tr><td>Voice input (only when you tap the microphone)</td><td>Converted to text by your phone's speech recognition service (usually Google), which may process the audio under its own policy. We never receive or store audio.</td><td>Not stored by us</td></tr>
+  <tr><td>Camera images for barcode scanning and label reading</td><td>Processed on your phone. Images are only uploaded if you contribute a product.</td><td>Your phone</td></tr>
+  <tr><td>Crash reports and basic usage events (device model, Android version, app version, crash details)</td><td>To find and fix bugs</td><td>Google Firebase Crashlytics and Google Analytics for Firebase</td></tr>
+</table>
+
+<h2>AI processing</h2>
+<p>To explain product ratings and answer NutriBot questions, the app sends the relevant product data and the parts of your profile and today's meals needed for the answer (for example goals, conditions, allergies and targets) to our server, which forwards them to <strong>Groq</strong>, our AI inference provider. Groq processes this to generate a reply. If you turn on the optional on-device model, NutriBot runs on your phone instead and those messages do not leave it.</p>
+
+<h2>Who we share data with</h2>
+<p>We only share data with service providers that run the app for us:</p>
+<ul>
+  <li><strong>Google Firebase</strong>: sign-in, crash reporting, analytics and app configuration</li>
+  <li><strong>Groq</strong>: AI text generation, as described above</li>
+  <li><strong>Render</strong> (server hosting) and <strong>Neon</strong> (database hosting)</li>
+  <li><strong>Open Food Facts</strong>: we look up the barcode you scan in this public database; no personal data is sent</li>
+</ul>
+<p>We do not sell personal data or share it for advertising. We may disclose data if required by law.</p>
+
+<h2>Security</h2>
+<p>Data is encrypted in transit (HTTPS). Access to your account data requires your sign-in token.</p>
+
+<h2>How long we keep data</h2>
+<p>We keep your data while your account exists. When you delete your account, your profile, meal and weight logs, scan history and personalised results are deleted from our server immediately, and from backups within 30 days. Product details you contributed stay in the shared product database without any link to you.</p>
+
+<h2>Deleting your data</h2>
+<ul>
+  <li>In the app: <strong>Profile → Delete account and data</strong>. This deletes your account on our server and everything stored on your phone.</li>
+  <li>Without the app: follow the steps on our <a href="delete-account.html">account deletion page</a>.</li>
+</ul>
+
+<h2>Your choices</h2>
+<p>You can edit your profile at any time, leave optional fields (such as medical notes) empty, turn the evening reminder off in Profile, and deny camera, microphone or notification permissions in Android settings.</p>
+
+<h2>Children</h2>
+<p>HealthHeat is intended for adults and is not directed to children under 16. We do not knowingly collect data from children.</p>
+
+<h2>Changes</h2>
+<p>If we change this policy, we will update the date above and, for significant changes, tell you in the app.</p>
+</main>
+</body>
+</html>

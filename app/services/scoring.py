@@ -46,6 +46,9 @@ class ScoringResult:
     glycemic_load: float = 0.0
     allergens: list = field(default_factory=list)
     allergen_warnings: list = field(default_factory=list)
+    # Plain-language reasons, biggest effect first (what the app shows as "why this score")
+    concerns: list = field(default_factory=list)
+    positives: list = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -53,43 +56,154 @@ class ScoringResult:
 # ---------------------------------------------------------------------------
 
 _CATEGORY_KEYWORDS = {
-    "oils":          ["oil", "fat", "butter", "margarine", "ghee", "lard"],
+    "oils":          ["oil", "fat", "butter", "margarine", "ghee", "lard", "vanaspati"],
     "beverages":     ["beverage", "drink", "juice", "soda", "water", "tea",
-                      "coffee", "smoothie", "syrup", "cola", "lemonade", "shake"],
+                      "coffee", "smoothie", "syrup", "cola", "lemonade", "shake",
+                      "nectar", "squash", "sharbat"],
     "dairy":         ["dairy", "milk", "cheese", "yogurt", "yoghurt", "cream",
-                      "fromage", "quark", "kefir", "whey"],
+                      "fromage", "quark", "kefir", "whey", "paneer", "curd", "dahi",
+                      "lassi", "buttermilk", "chaas"],
     "protein_foods": ["meat", "beef", "chicken", "pork", "poultry", "fish",
-                      "seafood", "salmon", "tuna", "egg", "tofu", "tempeh"],
-    "whole_foods":   ["fruit", "vegetable", "legume", "bean", "lentil",
-                      "nut", "peanut", "cashew", "almond", "pistachio", "walnut", 
-                      "seed", "grain", "oat", "quinoa", "rice", "pulse", "plant-based"],
+                      "seafood", "salmon", "tuna", "egg", "tofu", "tempeh", "mutton",
+                      "prawn", "sausage", "ham"],
+    "whole_foods":   ["fruit", "vegetable", "legume", "bean", "lentil", "pulse", "dal",
+                      "nut", "peanut", "cashew", "almond", "pistachio", "walnut",
+                      "seed", "grain", "oat", "quinoa", "rice", "millet", "potato",
+                      "dried fruit"],
     "condiments":    ["sauce", "condiment", "dressing", "ketchup", "mustard",
                       "vinegar", "spice", "seasoning", "pickle", "relish",
-                      "mayo", "mayonnaise", "hot-sauce"],
-    "confectionery": ["confection", "chocolate", "candy", "sweet", "dessert",
-                      "ice-cream", "ice cream", "gummy", "lolly", "toffee",
-                      "praline", "truffle"],
-    "grains_bakery": ["cereal", "bread", "pasta", "noodle", "biscuit", "cake",
-                      "pastry", "muffin", "cracker", "wafer", "flour",
-                      "breakfast-cereal"],
-    "snacks":        ["snack", "chip", "crisp", "popcorn", "pretzel",
-                      "puff", "stick", "bite"],
+                      "mayo", "mayonnaise", "hot sauce", "masala", "chutney", "achar"],
+    "confectionery": ["confection", "confectionery", "chocolate", "candy", "candies",
+                      "sweet", "dessert", "ice cream", "gummy", "gummies", "lolly",
+                      "toffee", "praline", "truffle", "mithai", "indian sweet",
+                      "laddu", "halwa", "barfi", "jam"],
+    "grains_bakery": ["cereal", "bread", "pasta", "noodle", "biscuit", "cookie", "cake",
+                      "pastry", "pastries", "muffin", "cracker", "wafer", "flour",
+                      "breakfast cereal", "atta", "rusk", "khakhra", "vermicelli"],
+    "snacks":        ["snack", "chip", "crisp", "popcorn", "pretzel", "puff",
+                      "namkeen", "bhujia", "chivda", "chiwda", "mixture", "papad",
+                      "nachos", "makhana", "farsan"],
 }
 
-def detect_category_group(categories: Optional[str]) -> str:
+# Compiled once: whole words only (with optional plural), so "nut" no longer matches
+# "coconut", "oat" no longer matches "coated" and "egg" no longer matches "veggie".
+_KEYWORD_PATTERNS = [
+    (group, kw, re.compile(rf"\b{re.escape(kw)}(?:s|es)?\b"))
+    for group, kws in _CATEGORY_KEYWORDS.items()
+    for kw in kws
+]
+
+# OFF's own food groups (computed from its category taxonomy) are the most reliable signal.
+_FOOD_GROUP_MAP = {
+    # level 2 (specific)
+    "en:fats": "oils",
+    "en:sweetened-beverages": "beverages",
+    "en:unsweetened-beverages": "beverages",
+    "en:artificially-sweetened-beverages": "beverages",
+    "en:fruit-juices": "beverages",
+    "en:fruit-nectars": "beverages",
+    "en:teas-and-herbal-teas-and-coffees": "beverages",
+    "en:waters-and-flavored-waters": "beverages",
+    "en:plant-based-milk-substitutes": "beverages",
+    "en:alcoholic-beverages": "beverages",
+    "en:milk-and-yogurt": "dairy",
+    "en:cheese": "dairy",
+    "en:dairy-desserts": "dairy",
+    "en:meat": "protein_foods",
+    "en:processed-meat": "protein_foods",
+    "en:fish-and-seafood": "protein_foods",
+    "en:eggs": "protein_foods",
+    "en:offals": "protein_foods",
+    "en:fruits": "whole_foods",
+    "en:vegetables": "whole_foods",
+    "en:legumes": "whole_foods",
+    "en:nuts": "whole_foods",
+    "en:dried-fruits": "whole_foods",
+    "en:potatoes": "whole_foods",
+    "en:dressings-and-sauces": "condiments",
+    "en:sweets": "confectionery",
+    "en:chocolate-products": "confectionery",
+    "en:ice-cream": "confectionery",
+    "en:biscuits-and-cakes": "grains_bakery",
+    "en:pastries": "grains_bakery",
+    "en:bread": "grains_bakery",
+    "en:breakfast-cereals": "grains_bakery",
+    "en:cereals": "grains_bakery",
+    "en:appetizers": "snacks",
+    "en:salty-and-fatty-products": "snacks",
+    # level 1 (broad) — only used when no level-2 group is present
+    "en:salty-snacks": "snacks",
+    "en:sugary-snacks": "confectionery",
+    "en:beverages": "beverages",
+    "en:milk-and-dairy-products": "dairy",
+    "en:fish-meat-eggs": "protein_foods",
+    "en:fruits-and-vegetables": "whole_foods",
+    "en:cereals-and-potatoes": "grains_bakery",
+}
+
+# Top-level OFF categories that say nothing about what the food is.
+_UNINFORMATIVE_TAGS = {
+    "plant based foods and beverages", "plant based foods", "foods", "groceries",
+    "beverages and beverages preparations", "unknown", "dried products",
+}
+
+CATEGORY_LABELS = {
+    "oils": "cooking fats and oils",
+    "beverages": "drinks",
+    "dairy": "dairy products",
+    "protein_foods": "meat, fish and eggs",
+    "whole_foods": "whole foods (fruit, vegetables, pulses, nuts, grains)",
+    "condiments": "sauces and condiments",
+    "confectionery": "sweets and chocolate",
+    "grains_bakery": "biscuits, breads and cereals",
+    "snacks": "savoury snacks",
+    "general": "packaged foods",
+}
+
+
+def _split_tags(categories) -> list:
+    """Accepts OFF categories as a list or a comma-separated string ('en:snacks,en:salty-snacks')."""
     if not categories:
-        return "general"
-    cat = categories.lower()
-    
-    # Specific fix: "plant-based-foods-and-beverages" is a very common top-level category on OFF
-    # representing solid whole foods, nuts, etc. Strip it or replace it to prevent false positive beverage match.
-    if "plant-based-foods-and-beverages" in cat:
-        cat = cat.replace("plant-based-foods-and-beverages", "plant-based-foods")
-    if "plant-based foods and beverages" in cat:
-        cat = cat.replace("plant-based foods and beverages", "plant-based foods")
-        
-    for group, keywords in _CATEGORY_KEYWORDS.items():
-        if any(k in cat for k in keywords):
+        return []
+    raw = categories if isinstance(categories, list) else str(categories).split(",")
+    tags = []
+    for t in raw:
+        t = t.strip().lower()
+        if ":" in t:
+            t = t.split(":", 1)[1]
+        t = t.replace("-", " ").replace("_", " ").strip()
+        if t:
+            tags.append(t)
+    return tags
+
+
+def _group_for_tag(tag: str) -> Optional[str]:
+    """Picks the group of the head noun: English puts it last ('chocolate biscuits' → biscuits)."""
+    best = None  # (end position, match length, group)
+    for group, kw, pattern in _KEYWORD_PATTERNS:
+        for m in pattern.finditer(tag):
+            key = (m.end(), m.end() - m.start())
+            if best is None or key > best[0]:
+                best = (key, group)
+    return best[1] if best else None
+
+
+def detect_category_group(categories, food_groups: Optional[list] = None) -> str:
+    """
+    OFF lists categories from broad to specific ('snacks, sweet snacks, biscuits'), so the most
+    specific tag is checked first. Previously only the broadest tag was stored and keywords matched
+    anywhere in the string, which put most Indian namkeen in "whole_foods" (salt limit 0.1 g).
+    """
+    for fg in reversed(food_groups or []):
+        group = _FOOD_GROUP_MAP.get(str(fg).strip().lower())
+        if group:
+            return group
+
+    for tag in reversed(_split_tags(categories)):
+        if tag in _UNINFORMATIVE_TAGS:
+            continue
+        group = _group_for_tag(tag)
+        if group:
             return group
     return "general"
 
@@ -111,25 +225,89 @@ def get_gi_estimate(food_name: str, group: str) -> int:
     return 50 # Default average
 
 COMMON_ALLERGENS = {
-    "milk": ["milk", "lactose", "whey", "casein", "buttermilk", "ghee", "paneer"],
-    "peanuts": ["peanut", "groundnut", "monkey nuts"],
-    "tree_nuts": ["almonds", "cashew", "walnut", "pistachio", "hazelnut"],
-    "gluten": ["wheat", "barley", "rye", "gluten", "maida", "suji"],
-    "soy": ["soy", "soybean", "edamame"],
-    "shellfish": ["shrimp", "crab", "lobster", "mussel"],
-    "fish": ["fish", "anchovy", "salmon", "cod"],
-    "sesame": ["sesame", "til"],
-    "mustard": ["mustard"],
+    "milk": ["milk", "milk solids", "lactose", "whey", "casein", "buttermilk", "ghee",
+             "paneer", "cheese", "cream", "curd", "yogurt", "yoghurt", "khoa", "khoya", "butter"],
+    "peanuts": ["peanut", "groundnut", "monkey nut"],
+    "tree_nuts": ["almond", "cashew", "walnut", "pistachio", "hazelnut", "pecan", "macadamia",
+                  "brazil nut", "pine nut", "badam", "kaju", "pista", "akhrot", "tree nut"],
+    "gluten": ["wheat", "barley", "rye", "gluten", "maida", "suji", "sooji", "semolina",
+               "atta", "oat"],
+    "soy": ["soy", "soya", "soybean", "edamame", "tofu"],
+    "shellfish": ["shrimp", "prawn", "crab", "lobster", "mussel", "oyster", "clam", "crustacean"],
+    "fish": ["fish", "anchovy", "salmon", "cod", "tuna", "sardine", "mackerel"],
+    "sesame": ["sesame", "til", "gingelly"],
+    "mustard": ["mustard", "sarson"],
+    "egg": ["egg", "albumin"],
 }
 
-def extract_allergens(ingredients_text: str) -> list:
-    detected = []
-    if not ingredients_text: return detected
-    text = ingredients_text.lower()
-    for allergen_category, keywords in COMMON_ALLERGENS.items():
-        if any(keyword in text for keyword in keywords):
-            detected.append(allergen_category)
-    return list(set(detected))
+# Plant "milks"/"butters" are not dairy.
+_NOT_DAIRY = re.compile(r"\b(coconut|almond|soy|soya|oat|rice|cashew|peanut|cocoa|nut|shea)\s+(?:milk|butter|cream)s?\b")
+
+_ALLERGEN_PATTERNS = {
+    cat: re.compile(r"\b(?:" + "|".join(re.escape(k) for k in kws) + r")(?:s|es)?\b")
+    for cat, kws in COMMON_ALLERGENS.items()
+}
+
+# OFF allergen tags → our allergen categories
+_OFF_ALLERGEN_MAP = {
+    "en:milk": "milk", "en:peanuts": "peanuts", "en:nuts": "tree_nuts", "en:gluten": "gluten",
+    "en:soybeans": "soy", "en:crustaceans": "shellfish", "en:molluscs": "shellfish",
+    "en:fish": "fish", "en:sesame-seeds": "sesame", "en:mustard": "mustard", "en:eggs": "egg",
+}
+
+ALLERGEN_LABELS = {
+    "milk": "milk", "peanuts": "peanuts", "tree_nuts": "tree nuts", "gluten": "gluten",
+    "soy": "soy", "shellfish": "shellfish", "fish": "fish", "sesame": "sesame",
+    "mustard": "mustard", "egg": "egg",
+}
+
+
+def extract_allergens(ingredients_text: str, off_allergens=None) -> list:
+    """Whole-word matching ("til" must not match "lentil"), merged with OFF's declared allergens."""
+    detected = set()
+    if ingredients_text:
+        # Keep the plant word ("peanut" is still an allergen), drop the dairy-sounding one
+        text = _NOT_DAIRY.sub(r"\1", ingredients_text.lower())
+        for allergen_category, pattern in _ALLERGEN_PATTERNS.items():
+            if pattern.search(text):
+                detected.add(allergen_category)
+    if off_allergens:
+        tags = off_allergens if isinstance(off_allergens, list) else str(off_allergens).split(",")
+        for tag in tags:
+            cat = _OFF_ALLERGEN_MAP.get(tag.strip().lower())
+            if cat:
+                detected.add(cat)
+    return sorted(detected)
+
+
+def user_allergen_categories(user_allergies) -> set:
+    """Maps free-text profile allergies ("Dairy", "Tree Nuts", "Peanut allergy") to allergen categories."""
+    cats = set()
+    for raw in user_allergies or []:
+        a = str(raw).lower().strip()
+        if not a or a in {"none", "no", "nil", "na", "n/a"}:
+            continue
+        if "peanut" in a or "groundnut" in a:
+            cats.add("peanuts")
+        elif "nut" in a or any(k in a for k in ("almond", "cashew", "walnut", "pistachio", "hazelnut")):
+            cats.add("tree_nuts")
+        if any(k in a for k in ("dairy", "milk", "lactose", "casein", "whey")):
+            cats.add("milk")
+        if any(k in a for k in ("gluten", "wheat", "celiac", "coeliac")):
+            cats.add("gluten")
+        if "soy" in a:
+            cats.add("soy")
+        if any(k in a for k in ("shellfish", "prawn", "shrimp", "crab", "crustacean", "lobster")):
+            cats.add("shellfish")
+        if "fish" in a and "shellfish" not in a:
+            cats.add("fish")
+        if "sesame" in a or a == "til":
+            cats.add("sesame")
+        if "mustard" in a:
+            cats.add("mustard")
+        if "egg" in a:
+            cats.add("egg")
+    return cats
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +328,11 @@ _THRESHOLDS = {
     "snacks":      (5.0,  0.75,  2.0,   0.3,  550),
     "general":     (5.0,  0.75,  2.0,   0.5,  500),
 }
+
+def _amount_word(value: float, floor: float) -> str:
+    """'High' only when well past the limit, so the words match the size of the penalty."""
+    return "Very high" if value >= floor * 3 else ("High" if value >= floor * 1.5 else "Slightly high")
+
 
 def _sugar_deduction(value: float, floor: float) -> float:
     if value <= floor:
@@ -275,7 +458,8 @@ def _score_macronutrients(
     ingredients_text: str,
     additives_tags: list,
     is_nut_or_seed: bool,
-    ingredients_count: int
+    ingredients_count: int,
+    serving_mult: float = 1.0,
 ) -> tuple[float, list, list]:
     """Returns (score, deductions, bonuses). Score range: 0–35."""
     floors = _THRESHOLDS.get(group, _THRESHOLDS["general"])
@@ -307,26 +491,30 @@ def _score_macronutrients(
             if not has_added_sugar:
                 s_ded = s_ded * 0.2
                 bonuses.append({
-                    "reason": f"Natural sugar ({sugar:.1f}g/100g) — unsweetened product — penalty discounted by 80%", 
+                    "reason": f"Natural sugar ({sugar:.1f}g/100g) — unsweetened product — penalty discounted by 80%",
+                    "label": "No added sugar", 
                     "points": round(abs(s_ded * 4.0), 1)
                 })
             elif nova_group == 1:
                 s_ded = s_ded * 0.5
                 bonuses.append({
-                    "reason": f"Natural sugar ({sugar:.1f}g/100g) in unprocessed whole food — penalty halved", 
+                    "reason": f"Natural sugar ({sugar:.1f}g/100g) in unprocessed whole food — penalty halved",
+                    "label": "Sugar is mostly natural", 
                     "points": round(abs(s_ded), 1)
                 })
             
             if s_ded < -0.1:
                 deductions.append({
-                    "reason": f"Sugar: {sugar:.1f}g/100g (group safe floor: {sugar_floor}g)", 
+                    "reason": f"Sugar: {sugar:.1f}g/100g (group safe floor: {sugar_floor}g)",
+                    "label": f"{_amount_word(sugar, sugar_floor)} sugar ({sugar:.1f} g per 100 g)", 
                     "points": round(s_ded, 1)
                 })
 
         sl_ded = _salt_deduction(salt, salt_floor)
         if sl_ded < -0.1:
             deductions.append({
-                "reason": f"Salt: {salt:.2f}g/100g (group safe floor: {salt_floor}g)", 
+                "reason": f"Salt: {salt:.2f}g/100g (group safe floor: {salt_floor}g)",
+                "label": f"{_amount_word(salt, salt_floor)} salt ({salt:.1f} g per 100 g)", 
                 "points": round(sl_ded, 1)
             })
 
@@ -338,25 +526,29 @@ def _score_macronutrients(
                 sf_ded = sf_ded * 0.2
                 bonuses.append({
                     "reason": "Cardioprotective natural fats in nuts/seeds — saturated fat penalty discounted by 80%",
+                    "label": "Fats come mainly from nuts or seeds",
                     "points": round(abs(sf_ded * 4.0), 1)
                 })
             elif is_single_ingredient:
                 sf_ded = sf_ded * 0.5
                 bonuses.append({
                     "reason": "Single-ingredient natural whole fat — saturated fat penalty halved",
+                    "label": "Single natural ingredient",
                     "points": round(abs(sf_ded), 1)
                 })
                 
             if sf_ded < -0.1:
                 deductions.append({
-                    "reason": f"Saturated fat: {sat_fat:.1f}g/100g (group safe floor: {sat_fat_floor}g)", 
+                    "reason": f"Saturated fat: {sat_fat:.1f}g/100g (group safe floor: {sat_fat_floor}g)",
+                    "label": f"{_amount_word(sat_fat, sat_fat_floor)} saturated fat ({sat_fat:.1f} g per 100 g)", 
                     "points": round(sf_ded, 1)
                 })
 
         tf_ded = _trans_fat_deduction(trans, trans_floor)
         if tf_ded < -0.1:
             deductions.append({
-                "reason": f"Trans fat: {trans:.2f}g/100g", 
+                "reason": f"Trans fat: {trans:.2f}g/100g",
+                "label": f"Contains trans fat ({trans:.1f} g per 100 g)", 
                 "points": round(tf_ded, 1)
             })
 
@@ -366,18 +558,21 @@ def _score_macronutrients(
                 kd_ded = 0.0
                 bonuses.append({
                     "reason": "Nutrient-dense whole nuts/seeds — high caloric density penalty waived",
+                    "label": "Calorie-dense, but from nuts or seeds",
                     "points": 0.0
                 })
             elif is_single_ingredient:
                 kd_ded = kd_ded * 0.5
                 bonuses.append({
                     "reason": "Single-ingredient natural food — high caloric density penalty halved",
+                    "label": "Single natural ingredient",
                     "points": round(abs(kd_ded), 1)
                 })
                 
             if kd_ded < -0.1:
                 deductions.append({
-                    "reason": f"High caloric density: {kcal:.0f} kcal/100g", 
+                    "reason": f"High caloric density: {kcal:.0f} kcal/100g",
+                    "label": f"Very calorie-dense ({kcal:.0f} kcal per 100 g)", 
                     "points": round(kd_ded, 1)
                 })
 
@@ -387,38 +582,47 @@ def _score_macronutrients(
 
         fiber_bonus = 6 if fiber >= 8 else (4 if fiber >= 5 else (2 if fiber >= 3 else 0))
         if fiber_bonus:
-            bonuses.append({"reason": f"Good fiber: {fiber:.1f}g/100g", "points": fiber_bonus})
+            bonuses.append({"reason": f"Good fiber: {fiber:.1f}g/100g", "label": f"Good fibre ({fiber:.1f} g per 100 g)", "points": fiber_bonus})
 
         protein_bonus = 4 if protein >= 25 else (3 if protein >= 15 else (2 if protein >= 8 else 0))
         if protein_bonus:
-            bonuses.append({"reason": f"Good protein: {protein:.1f}g/100g", "points": protein_bonus})
+            bonuses.append({"reason": f"Good protein: {protein:.1f}g/100g", "label": f"Good protein ({protein:.1f} g per 100 g)", "points": protein_bonus})
 
         # Heuristic 3: Diet Soda / Artificial Sweetener "Chemical Masquerade" Penalty
         sweetener_penalty = 0.0
         if _has_artificial_sweeteners(ingredients_text, additives_tags):
             sweetener_penalty = -10.0
             deductions.append({
-                "reason": "Artificially sweetened — chemical masquerade penalty applied", 
+                "reason": "Artificially sweetened — chemical masquerade penalty applied",
+                "label": "Artificially sweetened", 
                 "points": -10.0
             })
 
         total_ded = s_ded + sl_ded + sf_ded + tf_ded + kd_ded + sweetener_penalty
-        score = base + total_ded + fiber_bonus + protein_bonus
+        score = base + total_ded * serving_mult + fiber_bonus + protein_bonus
 
     else:
         # Fallback: use nutrient_levels dict (high/moderate/low)
         base = 15.0
-        score = base
+        total_ded = 0.0
         level_map = {"high": -4.0, "moderate": -2.0, "low": 0.0}
         for nutrient_key in ["sugars", "fat", "salt", "saturated-fat"]:
             level = nutrient_levels.get(nutrient_key, "")
             ded = level_map.get(level, 0.0)
             if ded:
                 deductions.append({
-                    "reason": f"{nutrient_key} level: {level} (from nutrient_levels, no exact data)", 
+                    "reason": f"{nutrient_key} level: {level} (from nutrient_levels, no exact data)",
+                    "label": f"{'High' if level == 'high' else 'Moderate'} {nutrient_key.replace('-', ' ')}",
                     "points": ded
                 })
-                score += ded
+                total_ded += ded
+        score = base + total_ded * serving_mult
+
+    # Serving size scales the penalties only. (It used to be applied afterwards by re-adding every
+    # bonus entry, including display-only ones, which inflated scores for small and large packs.)
+    if serving_mult != 1.0:
+        for d in deductions:
+            d["points"] = round(d["points"] * serving_mult, 1)
 
     return max(0.0, min(35.0, score)), deductions, bonuses
 
@@ -454,7 +658,7 @@ def _score_micronutrients(nutrients: dict, ingredients_text: str,
                 pts = 0  # industrial fortification gets no credit in ultra-processed
             else:
                 bonus += pts
-                bonuses.append({"reason": f"{label}: {val:.2f} (≥ 15% RDA per 100g)", "points": pts})
+                bonuses.append({"reason": f"{label}: {val:.2f} (≥ 15% RDA per 100g)", "label": f"Source of {label}", "points": pts})
 
     if fortified_and_ultra and bonus == 0 and any(
         (nutrients.get(k, 0) or 0) >= t for k, t, _ in _MICRONUTRIENTS
@@ -470,8 +674,12 @@ def _score_micronutrients(nutrients: dict, ingredients_text: str,
 
 _NOVA_SCORES = {1: 25, 2: 20, 3: 12, 4: 0}
 
-def _score_processing(nova_group: Optional[int], additives_count: int) -> tuple[int, list, list]:
+def _score_processing(nova_group: Optional[int], additives_count: int,
+                      has_ingredients: bool = True) -> tuple[int, list, list]:
     deductions, bonuses = [], []
+    if nova_group is None and not has_ingredients:
+        # No NOVA and no ingredient list: zero additives means "unknown", not "clean".
+        return 10, [], []
     if nova_group is not None:
         score = _NOVA_SCORES.get(nova_group, 10)
         label = {1: "Unprocessed/minimally processed",
@@ -479,17 +687,17 @@ def _score_processing(nova_group: Optional[int], additives_count: int) -> tuple[
                  3: "Processed food",
                  4: "Ultra-processed food"}
         if nova_group == 4:
-            deductions.append({"reason": f"Ultra-processed food (NOVA 4) — maximum processing penalty", "points": -25})
+            deductions.append({"reason": f"Ultra-processed food (NOVA 4) — maximum processing penalty", "label": "Ultra-processed", "points": -25})
         elif nova_group == 3:
-            deductions.append({"reason": f"Processed food (NOVA 3)", "points": -13})
+            deductions.append({"reason": f"Processed food (NOVA 3)", "label": "Processed food", "points": -13})
         else:
-            bonuses.append({"reason": f"{label.get(nova_group, 'NOVA ' + str(nova_group))} (NOVA {nova_group})", "points": score})
+            bonuses.append({"reason": f"{label.get(nova_group, 'NOVA ' + str(nova_group))} (NOVA {nova_group})", "label": "Minimally processed" if nova_group == 1 else "Lightly processed", "points": score})
         return score, deductions, bonuses
 
     # Estimate from additive count
     if additives_count == 0:
         score = 18
-        bonuses.append({"reason": "No additives detected — likely minimally processed (estimated)", "points": 18})
+        bonuses.append({"reason": "No additives detected — likely minimally processed (estimated)", "label": "No additives", "points": 18})
     elif additives_count <= 2:
         score = 13
     elif additives_count <= 5:
@@ -553,13 +761,13 @@ def _score_additives(additives_tags: list, group: str, serving_grams: Optional[f
             pts = -5
             if is_condiment and small_serving:
                 pts = -3  # halved for small serving
-            deductions.append({"reason": f"{code.upper()} — high-risk additive (artificial color/preservative/sweetener)", "points": pts})
+            deductions.append({"reason": f"{code.upper()} — high-risk additive (artificial color/preservative/sweetener)", "label": f"Additive of concern ({code.upper()})", "points": pts})
             base += pts
         elif code in _ORANGE_ADDITIVES:
             pts = -3
             if is_condiment and small_serving:
                 pts = -2
-            deductions.append({"reason": f"{code.upper()} — moderate-risk additive", "points": pts})
+            deductions.append({"reason": f"{code.upper()} — moderate-risk additive", "label": f"Additive to limit ({code.upper()})", "points": pts})
             base += pts
         elif code in _GREEN_ADDITIVES:
             bonuses.append({"reason": f"{code.upper()} — safe/beneficial additive (natural)", "points": 0})
@@ -632,21 +840,21 @@ def _score_ingredient_integrity(ingredients: list, ingredients_text: str, additi
     else:
         d = 0.0
     if d:
-        deductions.append({"reason": f"High ingredient count ({count}) — indicator of complexity/processing", "points": d})
+        deductions.append({"reason": f"High ingredient count ({count}) — indicator of complexity/processing", "label": f"Long ingredient list ({count} items)", "points": d})
         base += d
 
     # Red flag scan (max -4 total from flags)
     flag_total = 0.0
     for phrase, pts in _RED_FLAG_INGREDIENTS:
         if phrase in text_lower and flag_total > -4.0:
-            deductions.append({"reason": f"Contains '{phrase}'", "points": pts})
+            deductions.append({"reason": f"Contains '{phrase}'", "label": f"Contains {phrase}", "points": pts})
             base += pts
             flag_total += pts
 
     # Refined / Inflammatory Oils Scan (max -4.0)
     oil_ded = 0.0
     detected_oils = []
-    if any(p in text_lower for p in ["palm oil", "palm olein", "palm kernel", "hydrogenated palm"]):
+    if any(p in text_lower for p in ["palm oil", "palm olein", "palmolein", "palm fat", "palm kernel", "hydrogenated palm"]):
         oil_ded = -4.0
         detected_oils.append("palm oil/olein")
     elif any(p in text_lower for p in ["soybean oil", "soy oil", "vegetable oil", "canola oil", "rapeseed oil", "sunflower oil", "corn oil", "cottonseed oil"]):
@@ -654,7 +862,8 @@ def _score_ingredient_integrity(ingredients: list, ingredients_text: str, additi
         detected_oils.append("refined vegetable oil")
     if oil_ded < 0.0:
         deductions.append({
-            "reason": f"Contains refined inflammatory oil ({', '.join(detected_oils)})", 
+            "reason": f"Contains refined inflammatory oil ({', '.join(detected_oils)})",
+            "label": "Made with palm oil" if "palm oil/olein" in detected_oils else "Made with refined vegetable oil", 
             "points": oil_ded
         })
         base += oil_ded
@@ -672,7 +881,8 @@ def _score_ingredient_integrity(ingredients: list, ingredients_text: str, additi
     filler_ded = max(-3.0, filler_ded)
     if filler_ded < 0.0:
         deductions.append({
-            "reason": f"Contains high-glycemic filler ({', '.join(detected_fillers)})", 
+            "reason": f"Contains high-glycemic filler ({', '.join(detected_fillers)})",
+            "label": f"Contains {' and '.join(detected_fillers)}", 
             "points": filler_ded
         })
         base += filler_ded
@@ -680,7 +890,8 @@ def _score_ingredient_integrity(ingredients: list, ingredients_text: str, additi
     # Artificial Sweetener scanner in Pillar 5 (-3.0)
     if _has_artificial_sweeteners(ingredients_text, additives_tags):
         deductions.append({
-            "reason": "Contains artificial/synthetic sweetener (integrity penalty)", 
+            "reason": "Contains artificial/synthetic sweetener (integrity penalty)",
+            "label": "Artificially sweetened", 
             "points": -3.0
         })
         base += -3.0
@@ -689,7 +900,7 @@ def _score_ingredient_integrity(ingredients: list, ingredients_text: str, additi
     if ingredients:
         first = ingredients[0].lower()
         if any(term in first for term in _SUGAR_FIRST_TERMS):
-            deductions.append({"reason": "Sugar/sweetener is the primary ingredient (listed first by weight)", "points": -2.0})
+            deductions.append({"reason": "Sugar/sweetener is the primary ingredient (listed first by weight)", "label": "Sugar is the main ingredient", "points": -2.0})
             base -= 2.0
 
     return max(0.0, min(10.0, base)), deductions, bonuses
@@ -745,13 +956,102 @@ def _compute_confidence(nutrients: dict, nutrient_levels: dict,
 # Derived fields
 # ---------------------------------------------------------------------------
 
+# One scale everywhere: the verdict and the frequency come from the same score bands, so the app
+# can no longer say "AVOID" and "fine weekly" about the same product.
+VERDICT_BANDS = [
+    # min score, verdict, frequency
+    (80, "GREAT", "Fine to eat daily"),
+    (65, "GOOD",  "3–4 times a week"),
+    (50, "OKAY",  "Once or twice a week"),
+    (35, "LIMIT", "Once or twice a month"),
+    (0,  "AVOID", "Only on rare occasions"),
+]
+
+
+def verdict_for(score: int) -> str:
+    return next(v for floor, v, _ in VERDICT_BANDS if score >= floor)
+
+
 def _frequency(score: int) -> str:
-    if score >= 80: return "Daily"
-    if score >= 65: return "3–4 times per week"
-    if score >= 50: return "Weekly"
-    if score >= 35: return "Rarely (once or twice a month)"
-    if score >= 20: return "Avoid — consume only on special occasions"
-    return "Never recommended"
+    return next(f for floor, _, f in VERDICT_BANDS if score >= floor)
+
+
+def explain(result: "ScoringResult", product_name: Optional[str] = None,
+            nutrients: Optional[dict] = None) -> dict:
+    """
+    Plain-language explanation built only from the score breakdown. Used whenever the LLM is
+    unavailable, so users never see "AI explanation unavailable".
+    """
+    nutrients = nutrients or {}
+    name = (product_name or "This product").strip()
+    concerns, positives = result.concerns, result.positives
+
+    if concerns and positives:
+        reason = f"Main concerns: {_join(concerns[:3]).lower()}. On the plus side: {_join(positives[:2]).lower()}."
+    elif concerns:
+        reason = f"Main concerns: {_join(concerns[:3]).lower()}."
+    elif positives:
+        reason = f"Good points: {_join(positives[:3]).lower()}, with no major concerns."
+    else:
+        reason = "No major concerns or standout benefits in the available data."
+
+    category = CATEGORY_LABELS.get(result.category_group, "packaged foods")
+    summary = (f"{name} was compared with other {category}. "
+               f"Suggested amount: {result.safe_consumption_frequency.lower()}.")
+
+    kcal = nutrients.get("energy-kcal_100g")
+    if kcal is None and nutrients.get("energy_100g"):
+        kcal = nutrients["energy_100g"] / 4.184
+    if kcal is not None:
+        density = "high" if kcal >= 400 else ("moderate" if kcal >= 150 else "low")
+        energy = f"{kcal:.0f} kcal per 100 g, which is {density} for its weight."
+    else:
+        energy = "Calories per 100 g are not listed for this product."
+
+    parts = []
+    for key, label in (("carbohydrates_100g", "carbs"), ("proteins_100g", "protein"),
+                       ("fat_100g", "fat"), ("fiber_100g", "fibre")):
+        v = nutrients.get(key)
+        if v is not None:
+            parts.append(f"{float(v):.1f} g {label}")
+    macro = f"Per 100 g: {_join(parts)}." if parts else "Macronutrients are not listed for this product."
+
+    return {
+        "health_reason": reason,
+        "summary": summary,
+        "nutrition_analysis": {"energy_estimation": energy, "macronutrient_balance": macro},
+    }
+
+
+def _join(items: list) -> str:
+    items = [i for i in items if i]
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _top_labels(entries: list, limit: int, negative: bool) -> list:
+    """Largest effects first, one label per kind (several additives collapse into one line)."""
+    numeric = [e for e in entries if e.get("label") and isinstance(e.get("points"), (int, float))]
+    capped = [e for e in entries if e.get("label") and e.get("points") == "cap"]
+    numeric.sort(key=lambda e: e["points"] if negative else -e["points"])
+    seen, out = set(), []
+    for e in capped + numeric:
+        label = e["label"]
+        if negative and e.get("points") not in ("cap",) and e["points"] >= 0:
+            continue
+        if not negative and e["points"] <= 0:
+            continue
+        key = label.split(" (")[0]
+        if key.startswith("Additive"):
+            key = "Additive"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(label)
+        if len(out) >= limit:
+            break
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -769,6 +1069,8 @@ def compute_health_score(
     categories: Optional[str],
     serving_size: Optional[str],
     product_name: Optional[str] = None,
+    food_groups: Optional[list] = None,
+    off_allergens=None,
 ) -> ScoringResult:
     """
     Run the full 5-pillar scoring engine and return a ScoringResult.
@@ -779,8 +1081,10 @@ def compute_health_score(
     nutrient_levels = nutrient_levels or {}
     ingredients     = ingredients or []
     ingredients_text= ingredients_text or ""
+    if isinstance(categories, list):
+        categories = ",".join(categories)
 
-    group = detect_category_group(categories)
+    group = detect_category_group(categories, food_groups)
     serving_grams = _parse_serving_grams(serving_size)
 
     all_deductions, all_bonuses = [], []
@@ -790,7 +1094,11 @@ def compute_health_score(
     alcohol_capped = alcohol > 0.5
 
     # Detect nut/seed/dried fruit
-    is_nut_or_seed = _is_nut_seed_or_dried_fruit(product_name, categories, ingredients_text)
+    # Only for actual nut/seed/dried-fruit products: "Good Day Cashew" is a biscuit, not cashews.
+    is_nut_or_seed = group in ("whole_foods", "snacks", "general") and _is_nut_seed_or_dried_fruit(
+        product_name, categories, ingredients_text)
+    if is_nut_or_seed and group != "whole_foods" and ingredients:
+        is_nut_or_seed = any(k in str(ingredients[0]).lower() for k in _NUT_SEED_KEYWORDS)
 
     # ── Pillar 1: Macronutrients ────────────────────────────────────────────
     p1_base, p1_ded, p1_bon = _score_macronutrients(
@@ -802,22 +1110,8 @@ def compute_health_score(
         additives_tags=additives_tags,
         is_nut_or_seed=is_nut_or_seed,
         ingredients_count=len(ingredients),
+        serving_mult=_serving_multiplier(serving_grams),
     )
-
-    # Apply serving size multiplier to Pillar 1 deductions only
-    srv_mult = _serving_multiplier(serving_grams)
-    if srv_mult != 1.0:
-        adjusted_p1_ded = []
-        for d in p1_ded:
-            new_pts = round(d["points"] * srv_mult, 1)
-            adjusted_p1_ded.append({
-                **d,
-                "points": new_pts,
-                "note": f"adjusted for serving size ({serving_grams:.0f}g)" if srv_mult < 1 else None
-            })
-        p1_ded = adjusted_p1_ded
-        p1_base_adjusted = 30.0 + sum(d["points"] for d in p1_ded) + sum(b["points"] for b in p1_bon)
-        p1_base = max(0.0, min(35.0, p1_base_adjusted))
 
     all_deductions.extend(p1_ded)
     all_bonuses.extend(p1_bon)
@@ -827,7 +1121,7 @@ def compute_health_score(
     all_bonuses.extend(micro_bon)
 
     # ── Pillar 2: Processing ────────────────────────────────────────────────
-    p2, p2_ded, p2_bon = _score_processing(nova_group, len(additives_tags))
+    p2, p2_ded, p2_bon = _score_processing(nova_group, len(additives_tags), bool(ingredients_text.strip()))
     all_deductions.extend(p2_ded)
     all_bonuses.extend(p2_bon)
 
@@ -851,21 +1145,25 @@ def compute_health_score(
     all_bonuses.extend(p5_bon)
 
     # ── Hackathon Additions: Glycemic Load & Allergens ─────────────────────
+    # Glycemic load is defined per portion, not per 100 g (per 100 g it flagged oats and atta like
+    # candy). Use the pack's serving size, or a typical 50 g portion when none is given.
     carbs = nutrients.get("carbohydrates_100g", 0) or 0
+    portion_g = serving_grams if serving_grams and 5 <= serving_grams <= 300 else 50.0
     gi = get_gi_estimate(product_name, group)
-    gl = calculate_glycemic_load(carbs, gi)
-    
-    # Penalize if GL is very high (above 20 is considered high)
+    gl = calculate_glycemic_load(carbs * portion_g / 100.0, gi)
+
+    # Penalize if GL is very high (above 20 per portion is considered high)
     if gl > 20.0:
         gl_penalty = min(10.0, (gl - 20.0) / 2.0)
         all_deductions.append({
             "reason": f"High Glycemic Load ({gl:.1f}) — rapid blood sugar spike",
+            "label": "Likely to spike blood sugar",
             "points": -gl_penalty
         })
         p1_base -= gl_penalty # apply penalty to macronutrient pillar for now
 
-    detected_allergens = extract_allergens(ingredients_text)
-    allergen_warnings = [f"Contains {a.replace('_', ' ')}" for a in detected_allergens]
+    detected_allergens = extract_allergens(ingredients_text, off_allergens)
+    allergen_warnings = [f"Contains {ALLERGEN_LABELS.get(a, a)}" for a in detected_allergens]
 
     # ── Total ───────────────────────────────────────────────────────────────
     raw = p1_base + micro_bonus + p2 + p3 + p4 + p5
@@ -874,6 +1172,7 @@ def compute_health_score(
         raw = min(raw, 40.0)
         all_deductions.insert(0, {
             "reason": f"Contains alcohol ({alcohol:.1f}g/100g) — score hard-capped at 40",
+            "label": "Contains alcohol",
             "points": "cap"
         })
 
@@ -883,6 +1182,7 @@ def compute_health_score(
         raw = min(raw, 65.0)
         all_deductions.insert(0, {
             "reason": "Contains artificial/synthetic sweeteners — score hard-capped at 65 to prevent chemical masquerading",
+            "label": "Artificially sweetened",
             "points": "cap"
         })
 
@@ -891,6 +1191,7 @@ def compute_health_score(
         raw = min(raw, 75.0)
         all_deductions.insert(0, {
             "reason": "Missing ingredient data — score penalized and capped at 75",
+            "label": "Ingredient list not available",
             "points": -10.0
         })
         raw = max(0.0, raw - 10.0)
@@ -902,11 +1203,13 @@ def compute_health_score(
         additives_tags, nutri_score, ingredients_text
     )
 
+    visible_deductions = [d for d in all_deductions if d.get("points") != 0]
     return ScoringResult(
         health_score=health_score,
-        verdict="SMASH" if health_score >= 60 else "PASS",
-        is_good_for_health=health_score >= 60,
-        health_scale=round(health_score / 10.0, 1),
+        verdict=verdict_for(health_score),
+        is_good_for_health=health_score >= 65,
+        # Kept for older app builds; the schema requires 1–10.
+        health_scale=max(1.0, round(health_score / 10.0, 1)),
         safe_consumption_frequency=_frequency(health_score),
         pillar_scores={
             "macronutrient":        p1_base,
@@ -916,7 +1219,7 @@ def compute_health_score(
             "nutri_score_pts":      p4,
             "ingredient_integrity": p5,
         },
-        deductions=[d for d in all_deductions if d.get("points") != 0],
+        deductions=visible_deductions,
         bonuses=all_bonuses,
         data_confidence=confidence,
         category_group=group,
@@ -924,4 +1227,6 @@ def compute_health_score(
         glycemic_load=gl,
         allergens=detected_allergens,
         allergen_warnings=allergen_warnings,
+        concerns=_top_labels(visible_deductions, 4, negative=True),
+        positives=_top_labels(all_bonuses, 3, negative=False),
     )

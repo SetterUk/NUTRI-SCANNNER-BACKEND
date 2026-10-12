@@ -32,4 +32,7 @@ interface ProductDao {
 
     @Query("DELETE FROM scanned_products WHERE barcode = :barcode")
     suspend fun deleteProduct(barcode: String)
+
+    @Query("DELETE FROM scanned_products")
+    suspend fun deleteAll()
 }

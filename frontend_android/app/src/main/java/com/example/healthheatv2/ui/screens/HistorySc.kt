@@ -35,6 +35,8 @@ import androidx.compose.ui.res.painterResource
 import com.example.healthheatv2.R
 import com.example.healthheatv2.data.ProductCacheEntity
 import com.example.healthheatv2.ui.components.UserProfileAvatar
+import com.example.healthheatv2.ui.components.ScoreTier
+import com.example.healthheatv2.ui.components.color
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
 import com.example.healthheatv2.ui.viewmodel.ScannerViewModel
@@ -60,16 +62,19 @@ fun HistoryScreen(
     var searchQuery by remember { mutableStateOf("") }
     var activeFilter by remember { mutableStateOf("All") }
 
-    val filters = listOf("All", "SMASH", "PASS", "Today")
+    val filters = listOf("All", "Good picks", "To limit", "Today")
 
-    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
-    val filteredHistory = remember(searchQuery, activeFilter, history, smashThreshold) {
+    val filteredHistory = remember(searchQuery, activeFilter, history) {
         var list = history
-        // Filter by verdict
-        if (activeFilter == "SMASH") list = list.filter { (it.foodResponse.healthScore ?: 0) >= smashThreshold }
-        else if (activeFilter == "PASS") list = list.filter { (it.foodResponse.healthScore ?: 0) < smashThreshold }
+        fun tierOf(e: ProductCacheEntity) = ScoreTier.of(e.foodResponse.verdict, e.foodResponse.healthScore)
+        // Filter by verdict band
+        if (activeFilter == "Good picks") list = list.filter { tierOf(it)?.isGoodPick == true }
+        else if (activeFilter == "To limit") list = list.filter { tierOf(it) == ScoreTier.LIMIT || tierOf(it) == ScoreTier.AVOID }
         else if (activeFilter == "Today") {
-            val todayStart = System.currentTimeMillis() - 86_400_000L
+            val todayStart = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+            }.timeInMillis
             list = list.filter { it.scannedAt >= todayStart }
         }
         // Filter by search query
@@ -172,8 +177,8 @@ fun HistoryScreen(
                     val isActive = activeFilter == filter
                     val chipColor = when {
                         !isActive -> colors.card
-                        filter == "SMASH" -> colors.accentGreen
-                        filter == "PASS" -> colors.accentRed
+                        filter == "Good picks" -> colors.accentGreen
+                        filter == "To limit" -> colors.accentRed
                         else -> colors.accentBlue
                     }
                     Box(
@@ -302,9 +307,8 @@ private fun HistoryItemCard(
     val colors = LocalAppColors.current
     val product = item.foodResponse
     val score = product.healthScore ?: 0
-    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
-    val isSmash = score >= smashThreshold
-    val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
+    val tier = ScoreTier.of(product.verdict, product.healthScore)
+    val verdictColor = tier?.color() ?: colors.textSecondary
     val nutriScore = product.nutriScore?.uppercase() ?: "?"
     val nutriColor = nutriScoreColor(nutriScore, colors)
 
@@ -394,14 +398,14 @@ private fun HistoryItemCard(
             )
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                // SMASH/PASS chip
+                // Verdict chip
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(verdictColor.copy(0.12f))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Text(if (isSmash) "SMASH" else "PASS", color = verdictColor, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                    Text((tier?.label ?: "Not rated").uppercase(), color = verdictColor, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                 }
                 // Nutriscore chip
                 Box(
@@ -443,4 +447,4 @@ private fun HistoryItemCard(
 }
 
 private fun formatDate(timestamp: Long): String =
-    SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))
+    if (timestamp <= 0L) "" else SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))

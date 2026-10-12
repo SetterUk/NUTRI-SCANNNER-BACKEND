@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +38,8 @@ import com.example.healthheatv2.network.RetrofitClient
 @Composable
 fun ProfileScreen(
     authViewModel: AuthViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onAccountDeleted: () -> Unit = {}
 ) {
     val colors = LocalAppColors.current
     val coroutineScope = rememberCoroutineScope()
@@ -49,7 +51,11 @@ fun ProfileScreen(
     var weight by remember { mutableStateOf(userProfile?.weightKg?.toString() ?: "") }
     var height by remember { mutableStateOf(userProfile?.height?.toString() ?: "") }
     var allergies by remember { mutableStateOf(userProfile?.allergies?.joinToString(", ") ?: "") }
-    var healthGoals by remember { mutableStateOf(userProfile?.healthGoals ?: "") }
+    // Canonical goal key + condition keys (older profiles stored free text; the normalizer reads both).
+    var healthGoals by remember { mutableStateOf(com.example.healthheatv2.services.ProfileNormalizer.goal(userProfile?.healthGoals, userProfile?.dietaryPreferences)) }
+    var selectedConditions by remember {
+        mutableStateOf(com.example.healthheatv2.services.ProfileNormalizer.healthTags(userProfile?.healthTags, userProfile?.dietaryPreferences, userProfile?.healthGoals).toSet())
+    }
     var selectedDiet by remember { mutableStateOf(userProfile?.dietaryPreferences.takeIf { !it.isNullOrBlank() } ?: "None") }
     var gender by remember { mutableStateOf(userProfile?.gender ?: "Prefer not to say") }
     var activityLevel by remember { mutableStateOf(userProfile?.activityLevel ?: "Prefer not to say") }
@@ -70,7 +76,7 @@ fun ProfileScreen(
     val email = currentUser?.email
     val displayName = currentUser?.displayName
 
-    val diets = listOf("None", "Vegan", "Vegetarian", "Keto", "Diabetic", "Bulking", "Gluten-Free")
+    val diets = listOf("None", "Vegetarian", "Eggitarian", "Jain", "Vegan", "Keto", "Gluten-Free")
     val genders = listOf("Prefer not to say", "Female", "Male", "Non-binary", "Other")
     val activityLevels = listOf("Prefer not to say", "Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Extra Active")
 
@@ -81,8 +87,9 @@ fun ProfileScreen(
             weight = profile.weightKg?.toString() ?: ""
             height = profile.height?.toString() ?: ""
             allergies = profile.allergies?.joinToString(", ") ?: ""
-            healthGoals = profile.healthGoals ?: ""
-            selectedDiet = profile.dietaryPreferences.takeIf { !it.isNullOrBlank() } ?: "None"
+            healthGoals = com.example.healthheatv2.services.ProfileNormalizer.goal(profile.healthGoals, profile.dietaryPreferences)
+            selectedConditions = com.example.healthheatv2.services.ProfileNormalizer.healthTags(profile.healthTags, profile.dietaryPreferences, profile.healthGoals).toSet()
+            selectedDiet = profile.dietaryPreferences.takeIf { !it.isNullOrBlank() && it in diets } ?: "None"
             gender = profile.gender ?: "Prefer not to say"
             activityLevel = profile.activityLevel ?: "Prefer not to say"
             isEditing = false
@@ -134,8 +141,9 @@ fun ProfileScreen(
                             weight = profile.weightKg?.toString() ?: ""
                             height = profile.height?.toString() ?: ""
                             allergies = profile.allergies?.joinToString(", ") ?: ""
-                            healthGoals = profile.healthGoals ?: ""
-                            selectedDiet = profile.dietaryPreferences.takeIf { !it.isNullOrBlank() } ?: "None"
+                            healthGoals = com.example.healthheatv2.services.ProfileNormalizer.goal(profile.healthGoals, profile.dietaryPreferences)
+                            selectedConditions = com.example.healthheatv2.services.ProfileNormalizer.healthTags(profile.healthTags, profile.dietaryPreferences, profile.healthGoals).toSet()
+                            selectedDiet = profile.dietaryPreferences.takeIf { !it.isNullOrBlank() && it in diets } ?: "None"
                         }
                         saveMessage = null
                         isEditing = false
@@ -395,21 +403,11 @@ fun ProfileScreen(
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = healthGoals,
-                        onValueChange = { healthGoals = it },
-                        label = { Text("Health Goals & Conditions (comma separated)") },
-                        placeholder = { Text("e.g. Weight loss, Diabetic, High blood pressure") },
-                        modifier = Modifier.fillMaxWidth().height(100.dp),
-                        maxLines = 3,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colors.accentGreen,
-                            unfocusedBorderColor = colors.border,
-                            focusedTextColor = colors.textPrimary,
-                            unfocusedTextColor = colors.textPrimary,
-                            cursorColor = colors.accentGreen
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                    com.example.healthheatv2.ui.components.GoalConditionPicker(
+                        selectedGoal = healthGoals,
+                        onGoalChange = { healthGoals = it },
+                        selectedConditions = selectedConditions,
+                        onConditionsChange = { selectedConditions = it }
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))
@@ -468,7 +466,8 @@ fun ProfileScreen(
                                     profileData["allergies"] = if (allergies.isNotBlank())
                                         allergies.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                                     else emptyList<String>()
-                                    if (healthGoals.isNotBlank()) profileData["health_goals"] = healthGoals
+                                    profileData["health_goals"] = healthGoals
+                                    profileData["health_tags"] = selectedConditions.toList()
 
                                     RetrofitClient.apiService.updateProfile(profileData)
                                     authViewModel.fetchProfile()
@@ -518,8 +517,12 @@ fun ProfileScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     ProfileInfoCard(
-                        label = "Health Goals & Conditions",
-                        value = if (healthGoals.isNotBlank()) healthGoals else "Not set",
+                        label = "Goal & Conditions",
+                        value = buildString {
+                            append(com.example.healthheatv2.services.ProfileNormalizer.GOAL_OPTIONS.firstOrNull { it.first == healthGoals }?.second ?: "Eat healthier")
+                            val labels = com.example.healthheatv2.services.ProfileNormalizer.CONDITION_OPTIONS.filter { it.first in selectedConditions }.map { it.second }
+                            if (labels.isNotEmpty()) append(" · " + labels.joinToString(", "))
+                        },
                         colors = colors
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -591,6 +594,14 @@ fun ProfileScreen(
                             ProfileInfoCard(label = "Target Calories", value = calStr, colors = colors)
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text("Reminders", color = colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    com.example.healthheatv2.ui.components.ReminderSettingRow()
+
+                    Spacer(modifier = Modifier.height(32.dp))
+                    DeleteAccountSection(authViewModel = authViewModel, onAccountDeleted = onAccountDeleted)
                 }
 
                 Spacer(modifier = Modifier.height(48.dp))
@@ -624,6 +635,56 @@ private fun ProfileInfoCard(
             color = colors.textPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun DeleteAccountSection(authViewModel: AuthViewModel, onAccountDeleted: () -> Unit) {
+    val colors = LocalAppColors.current
+    val scope = rememberCoroutineScope()
+    var showConfirm by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text("Account", color = colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { showConfirm = true },
+            enabled = !deleting,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, colors.accentRed.copy(alpha = 0.6f))
+        ) {
+            if (deleting) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.accentRed)
+            else Text("Delete account and data", color = colors.accentRed, fontWeight = FontWeight.SemiBold)
+        }
+        error?.let {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(it, color = colors.accentRed, fontSize = 13.sp)
+        }
+    }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("Delete your account?") },
+            text = { Text("This permanently deletes your profile, scan history, meal logs and chat history. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showConfirm = false
+                    deleting = true
+                    error = null
+                    scope.launch {
+                        authViewModel.deleteAccount()
+                            .onSuccess { onAccountDeleted() }
+                            .onFailure { error = "Couldn't delete your account. Check your connection and try again." }
+                        deleting = false
+                    }
+                }) { Text("Delete", color = colors.accentRed) }
+            },
+            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } }
         )
     }
 }

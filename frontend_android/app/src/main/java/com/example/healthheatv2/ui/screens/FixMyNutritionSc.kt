@@ -286,11 +286,8 @@ fun AiRationaleCard(rationale: String?, isLoading: Boolean) {
                     )
                 }
             } else if (rationale != null) {
-                val cleanRationale = rationale
-                    .replace(Regex("^(⚡ \\[Gemma 4 E2B\\]|☁️ \\[Cloud AI\\]|🔋 \\[Offline\\])\\s*\n"), "")
-                    .trim()
                 Text(
-                    text = cleanRationale,
+                    text = com.example.healthheatv2.ui.components.AiText.annotated(rationale),
                     color = colors.textPrimary,
                     fontSize = 14.sp,
                     lineHeight = 21.sp

@@ -32,6 +32,9 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.healthheatv2.R
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.ui.theme.LocalAppColors
+import com.example.healthheatv2.ui.components.ScoreTier
+import com.example.healthheatv2.ui.components.color
+import com.example.healthheatv2.services.NutrientLevels
 import com.example.healthheatv2.ui.viewmodel.ApiState
 import com.example.healthheatv2.ui.viewmodel.ScannerViewModel
 import kotlin.math.roundToInt
@@ -158,7 +161,7 @@ fun DetailedNutritionScreen(
         if (!summary.isNullOrEmpty()) {
             item {
                 Spacer(Modifier.height(20.dp))
-                SectionHeader("AI Summary", Icons.Filled.AutoAwesome, colors.accentAmber)
+                SectionHeader("Summary", Icons.Filled.AutoAwesome, colors.accentAmber)
                 Spacer(Modifier.height(10.dp))
                 Box(
                     modifier = Modifier
@@ -194,13 +197,12 @@ fun DetailedNutritionScreen(
 
 
         // ── Nutrient Levels Traffic Light ─────────
-        val nutrientLevels = product.nutrientLevels
-        if (!nutrientLevels.isNullOrEmpty()) {
+        if (!nutrients.isNullOrEmpty() || !product.nutrientLevels.isNullOrEmpty()) {
             item {
                 Spacer(Modifier.height(24.dp))
-                SectionHeader("Traffic Light", Icons.Filled.Lens, colors.textSecondary)
+                SectionHeader("At a glance (per 100 g)", Icons.Filled.Lens, colors.textSecondary)
                 Spacer(Modifier.height(10.dp))
-                TrafficLightGrid(levels = nutrientLevels)
+                TrafficLightGrid(levels = NutrientLevels.levels(nutrients, product.nutrientLevels))
             }
         }
 
@@ -232,31 +234,14 @@ fun DetailedNutritionScreen(
             }
         }
 
-        // ── Alternatives ─────────────────────────
-        val alternatives = product.alternatives
-        if (!alternatives.isNullOrEmpty()) {
-            item {
-                Spacer(Modifier.height(24.dp))
-                SectionHeader("Better Alternatives", Icons.Filled.SwapHoriz, colors.accentGreen)
-                Spacer(Modifier.height(10.dp))
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(alternatives) { alt ->
-                        AltItemCard(alt = alt)
-                    }
-                }
-            }
-        }
-
         // ── Raw Nutrients Table ───────────────────
-        if (!nutrients.isNullOrEmpty()) {
+        val nutrientRows = NutrientLevels.displayRows(nutrients)
+        if (nutrientRows.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(24.dp))
-                SectionHeader("All Nutrients", Icons.Filled.TableChart, colors.textSecondary)
+                SectionHeader("Nutrition facts (per 100 g)", Icons.Filled.TableChart, colors.textSecondary)
                 Spacer(Modifier.height(10.dp))
-                RawNutrientsTable(nutrients = nutrients)
+                RawNutrientsTable(rows = nutrientRows)
             }
         }
 
@@ -271,70 +256,6 @@ fun DetailedNutritionScreen(
     }
 }
 
-// ─────────────────────────────────────────────────
-//  Local Alternative Card
-// ─────────────────────────────────────────────────
-@Composable
-private fun AltItemCard(alt: com.example.healthheatv2.network.AlternativeProduct) {
-    val colors = LocalAppColors.current
-    val nutriColor = nutriScoreColor(alt.nutriScore?.uppercase() ?: "?", colors)
-    Column(
-        modifier = Modifier
-            .width(130.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(colors.card)
-            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(nutriColor.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            SubcomposeAsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(if (alt.imageUrl?.startsWith("/") == true) {
-                        com.example.healthheatv2.network.RetrofitClient.BASE_URL.dropLast(1) + alt.imageUrl
-                    } else {
-                        alt.imageUrl
-                    })
-                    .crossfade(true)
-                    .build(),
-                contentDescription = alt.name,
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
-                error = {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Text(
-                            text = alt.name?.take(1)?.uppercase() ?: "?",
-                            color = nutriColor, 
-                            fontSize = 24.sp, 
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    }
-                }
-            )
-        }
-        Text(alt.name ?: "Product", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, lineHeight = 16.sp)
-        Text(alt.brand ?: "", color = colors.textSecondary, fontSize = 11.sp, maxLines = 1)
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(nutriColor.copy(alpha = 0.12f))
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        ) {
-            Text(alt.nutriScore?.uppercase() ?: "?", color = nutriColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────
-//  Section Header
-// ─────────────────────────────────────────────────
 @Composable
 private fun SectionHeader(title: String, icon: ImageVector, tintColor: Color) {
     val colors = LocalAppColors.current
@@ -417,8 +338,9 @@ private fun SafetyWarningSection(allergens: String?, additives: List<String>?) {
 @Composable
 private fun ConsumptionAdviceCard(product: FoodResponse) {
     val colors = LocalAppColors.current
-    val isGood = product.isGoodForHealth ?: false
-    val statusColor = if (isGood) colors.accentGreen else colors.accentRed
+    val tier = ScoreTier.of(product.verdict, product.healthScore)
+    val statusColor = tier?.color() ?: colors.textSecondary
+    val score = product.healthScore
 
     Column(
         modifier = Modifier
@@ -430,25 +352,18 @@ private fun ConsumptionAdviceCard(product: FoodResponse) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Health scale
-        if (product.healthScale != null) {
+        if (score != null) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Health Scale", color = colors.textSecondary, fontSize = 13.sp)
+                Text(tier?.label ?: "Score", color = statusColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "${product.healthScale}",
-                        color = statusColor,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text("/10", color = colors.textSecondary, fontSize = 14.sp)
+                    Text("$score", color = statusColor, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("/100", color = colors.textSecondary, fontSize = 14.sp)
                 }
             }
-            // Scale bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -459,7 +374,7 @@ private fun ConsumptionAdviceCard(product: FoodResponse) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .fillMaxWidth((product.healthScale / 10.0).toFloat().coerceIn(0f, 1f))
+                        .fillMaxWidth((score / 100f).coerceIn(0f, 1f))
                         .clip(RoundedCornerShape(3.dp))
                         .background(statusColor)
                 )
@@ -471,11 +386,12 @@ private fun ConsumptionAdviceCard(product: FoodResponse) {
             Text(product.healthReason, color = colors.textPrimary, fontSize = 13.sp, lineHeight = 20.sp)
         }
 
-        if (!product.safeConsumptionFrequency.isNullOrBlank()) {
+        val frequency = product.safeConsumptionFrequency?.takeIf { it.isNotBlank() } ?: tier?.frequency
+        if (frequency != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Schedule, contentDescription = null, tint = colors.accentAmber, modifier = Modifier.size(16.dp))
-                Text("Safe to consume: ", color = colors.textSecondary, fontSize = 13.sp)
-                Text(product.safeConsumptionFrequency, color = colors.accentAmber, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Filled.Schedule, contentDescription = null, tint = statusColor, modifier = Modifier.size(16.dp))
+                Text("How often: ", color = colors.textSecondary, fontSize = 13.sp)
+                Text(frequency, color = statusColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -588,19 +504,9 @@ private data class MacroEntry(val label: String, val value: Float, val display: 
 //  Raw Nutrients Table
 // ─────────────────────────────────────────────────
 @Composable
-private fun RawNutrientsTable(nutrients: Map<String, Any>) {
+private fun RawNutrientsTable(rows: List<NutrientLevels.Row>) {
     val colors = LocalAppColors.current
-    val displayKeys = nutrients.entries
-        .filter { it.key.endsWith("_100g") }
-        .map { (k, v) ->
-            val label = k.removeSuffix("_100g").replace("-", " ").replace("_", " ")
-                .split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-            val value = when (val num = v) {
-                is Number -> if (num.toFloat() == num.toFloat().toLong().toFloat()) "${num.toLong()}" else "%.1f".format(num.toFloat())
-                else -> v.toString()
-            }
-            label to value
-        }
+    val displayKeys = rows.map { it.label to it.value }
 
     Column(
         modifier = Modifier
@@ -632,28 +538,19 @@ private fun RawNutrientsTable(nutrients: Map<String, Any>) {
 //  Traffic Light Grid
 // ─────────────────────────────────────────────────
 @Composable
-private fun TrafficLightGrid(levels: Map<String, String>) {
+private fun TrafficLightGrid(levels: List<NutrientLevels.Level>) {
     val colors = LocalAppColors.current
-    val nutrients = mapOf(
-        "sugars" to "Sugar",
-        "fat" to "Fat",
-        "saturated-fat" to "Saturated Fat",
-        "salt" to "Salt",
-        "fiber" to "Fiber",
-        "proteins" to "Protein"
-    )
 
     Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // Group into rows of 2
-        nutrients.entries.chunked(2).forEach { row ->
+        levels.chunked(2).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { (key, label) ->
-                    val level = levels[key]?.lowercase() ?: "unknown"
-                    val levelColor = when (level) {
-                        "low" -> colors.accentGreen
-                        "moderate" -> colors.accentAmber
-                        "high" -> colors.accentRed
-                        else -> colors.textHint
+                row.forEach { level ->
+                    val levelColor = when (level.tone) {
+                        NutrientLevels.Tone.GOOD -> colors.accentGreen
+                        NutrientLevels.Tone.OKAY -> colors.accentAmber
+                        NutrientLevels.Tone.BAD -> colors.accentRed
+                        NutrientLevels.Tone.NEUTRAL -> colors.textSecondary
+                        NutrientLevels.Tone.UNKNOWN -> colors.textHint
                     }
                     Column(
                         modifier = Modifier
@@ -665,11 +562,10 @@ private fun TrafficLightGrid(levels: Map<String, String>) {
                     ) {
                         Box(modifier = Modifier.size(10.dp).background(levelColor, CircleShape))
                         Spacer(Modifier.height(8.dp))
-                        Text(label, color = colors.textSecondary, fontSize = 11.sp)
-                        Text(level.replaceFirstChar { it.uppercase() }, color = levelColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(level.name, color = colors.textSecondary, fontSize = 11.sp)
+                        Text(level.label, color = levelColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                // Pad if odd number
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }

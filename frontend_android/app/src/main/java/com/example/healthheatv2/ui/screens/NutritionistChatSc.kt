@@ -577,24 +577,27 @@ private fun ChatInputBar(
                                 nutritionEngine
                             )
                             
-                            val logFoodRegex = "\\[LOG_FOOD:\\s*(.*?)\\]".toRegex()
-                            val match = logFoodRegex.find(response)
-                            var finalResponse = response
-                            if (match != null) {
-                                val foodName = match.groupValues[1]
-                                finalResponse = finalResponse.replace(match.value, "").trim()
-                                val success = nutritionEngine.searchAndLogFood(foodName)
-                                if (success) {
-                                    finalResponse += "\n\n*(Logged $foodName to your daily tracker!)*"
+                            val tags = parseLogFoodTags(response)
+                            var finalResponse = stripLogFoodTags(response)
+
+                            val outcomes = mutableListOf<NutritionEngine.LogOutcome>()
+                            for (tag in tags) {
+                                outcomes += nutritionEngine.logFoodsFromText(tag.description, tag.estimate)
+                            }
+                            // Offline tier (or a model that forgot the tags): log what the user said directly.
+                            if (tags.isEmpty() && looksLikeFoodLog(clean)) {
+                                outcomes += nutritionEngine.logFoodsFromText(clean)
+                            }
+                            if (outcomes.isNotEmpty()) {
+                                finalResponse += "\n\n" + describeLogOutcomes(outcomes)
+                                if (outcomes.any { it !is NutritionEngine.LogOutcome.NotFound }) {
                                     onFoodLogged()
-                                } else {
-                                    finalResponse += "\n\n*(Could not find $foodName in the database to log.)*"
                                 }
                             }
 
-                            // Stream tokens into the active message in real-time
+                            // Reveal the reply quickly. The full text is already here, so cap the animation at ~0.5s.
                             var streamedText = ""
-                            val chunkSize = if (finalResponse.length > 400) 4 else 2
+                            val chunkSize = maxOf(3, finalResponse.length / 30)
                             var i = 0
                             while (i < finalResponse.length && isActive) {
                                 val end = minOf(i + chunkSize, finalResponse.length)
@@ -731,7 +734,10 @@ fun ChatBubble(
     val hasThink = textParts.size > 1 && message.text.contains("<think>")
     val thinkText = if (hasThink) textParts[0].substringAfter("<think>").trim() else null
     val rawMainText = if (hasThink) textParts[1].trim() else message.text
-    val mainText = rawMainText.replace(Regex("[*#_~`]"), "") // Strip all markdown symbols to ensure purely clean text
+    // Bold and lists render as formatting; engine tags and stray Markdown symbols are removed
+    val mainText = if (message.isUser) rawMainText else com.example.healthheatv2.ui.components.AiText.plain(rawMainText)
+    val mainTextStyled = if (message.isUser) androidx.compose.ui.text.AnnotatedString(rawMainText)
+        else com.example.healthheatv2.ui.components.AiText.annotated(rawMainText)
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -852,7 +858,7 @@ fun ChatBubble(
 
                     if (mainText.isNotBlank()) {
                         Text(
-                            text = mainText,
+                            text = mainTextStyled,
                             color = if (message.isUser) Color.White else colors.textPrimary,
                             fontSize = 15.sp,
                             lineHeight = 22.sp
@@ -1178,4 +1184,51 @@ fun GemmaDiagnosticsDialog(
         containerColor = colors.card,
         shape = RoundedCornerShape(20.dp)
     )
+}
+
+// ── Food logging helpers for NutriBot replies ────────────────────────────────
+
+private data class LogFoodTag(
+    val description: String,
+    val estimate: NutritionEngine.AiEstimate?
+)
+
+private val LOG_FOOD_REGEX = Regex("\\[LOG_FOOD:\\s*([^\\]]*?)\\]", RegexOption.IGNORE_CASE)
+
+/** Parses "[LOG_FOOD: 2 roti | 80 | 240 | 7 | 40 | 3]"; the estimate fields are optional. */
+private fun parseLogFoodTags(text: String): List<LogFoodTag> = LOG_FOOD_REGEX.findAll(text).mapNotNull { m ->
+    val parts = m.groupValues[1].split("|").map { it.trim() }
+    val description = parts.firstOrNull()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+    val nums = parts.drop(1).map { part -> part.filter { it.isDigit() || it == '.' }.toFloatOrNull() }
+    val estimate = if (nums.size >= 5 && nums.take(5).all { it != null }) {
+        NutritionEngine.AiEstimate(grams = nums[0]!!, calories = nums[1]!!, protein = nums[2]!!, carbs = nums[3]!!, fat = nums[4]!!)
+    } else null
+    LogFoodTag(description, estimate)
+}.toList()
+
+private fun stripLogFoodTags(text: String): String = LOG_FOOD_REGEX.replace(text, "").trim()
+
+private val FOOD_LOG_INTENT = Regex(
+    "^\\s*(please\\s+)?(log|add|track|i\\s+(just\\s+)?(had|ate|drank|have had)|had|ate|drank)\\b",
+    RegexOption.IGNORE_CASE
+)
+
+private fun looksLikeFoodLog(userText: String): Boolean = FOOD_LOG_INTENT.containsMatchIn(userText)
+
+private fun describeLogOutcomes(outcomes: List<NutritionEngine.LogOutcome>): String {
+    val logged = outcomes.filterIsInstance<NutritionEngine.LogOutcome.Matched>()
+    val estimated = outcomes.filterIsInstance<NutritionEngine.LogOutcome.Estimated>()
+    val missing = outcomes.filterIsInstance<NutritionEngine.LogOutcome.NotFound>()
+    val lines = mutableListOf<String>()
+    if (logged.isNotEmpty()) {
+        lines += "✓ Logged: " + logged.joinToString(", ") { "${it.label} (${it.grams.toInt()}g, ${it.calories.toInt()} kcal)" }
+    }
+    if (estimated.isNotEmpty()) {
+        lines += "≈ Logged with an AI estimate: " + estimated.joinToString(", ") { "${it.label} (~${it.calories.toInt()} kcal)" }
+    }
+    if (missing.isNotEmpty()) {
+        lines += "✗ Couldn't find: " + missing.joinToString(", ") { it.label } +
+            ". Try a common name with a quantity, like \"1 bowl dal\" or \"200g paneer\"."
+    }
+    return lines.joinToString("\n")
 }

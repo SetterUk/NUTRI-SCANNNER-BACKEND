@@ -23,20 +23,37 @@ data class NutritionAnalysis(
     @SerializedName("energy_estimation") val energyEstimation: String?,
     @SerializedName("macronutrient_balance") val macronutrientBalance: String?
 )
+/** A healthier product from the same category, already filtered for the user's allergies/diet. */
 data class AlternativeProduct(
-    @SerializedName("product_name") val name: String?,
-    @SerializedName("brands") val brand: String?,
-    @SerializedName("image_url") val imageUrl: String?,
-    @SerializedName("nutriscore_grade") val nutriScore: String?,
     @SerializedName("code") val code: String?,
-    @SerializedName("color_hex") val colorHex: String?
+    @SerializedName("name") val name: String?,
+    @SerializedName("brand") val brand: String?,
+    @SerializedName("image_url") val imageUrl: String?,
+    @SerializedName("nutri_score") val nutriScore: String?,
+    @SerializedName("health_score") val healthScore: Int?,
+    @SerializedName("verdict") val verdict: String?,
+    @SerializedName("why_better") val whyBetter: List<String>?
+)
+
+/** Plain-language reasons behind the score, computed by the backend's scoring engine (not the LLM). */
+data class ScoreBreakdown(
+    @SerializedName("concerns") val concerns: List<String>?,
+    @SerializedName("positives") val positives: List<String>?,
+    @SerializedName("category") val category: String?,
+    @SerializedName("allergens") val allergens: List<String>?,
+    @SerializedName("data_confidence") val dataConfidence: Double?
 )
 data class TokenData(
     @SerializedName("id_token") val idToken: String
 )
 data class AuthResponse(
     @SerializedName("access_token") val accessToken: String,
-    @SerializedName("token_type") val tokenType: String
+    @SerializedName("token_type") val tokenType: String,
+    @SerializedName("user") val user: AuthUser? = null
+)
+data class AuthUser(
+    @SerializedName("id") val id: Long?,
+    @SerializedName("email") val email: String?
 )
 data class ContributeRequest(
     @SerializedName("name") val name: String,
@@ -93,7 +110,55 @@ data class FoodResponse(
     @SerializedName("nutrient_levels") val nutrientLevels: Map<String, String>?,
     @SerializedName("packaging") val packaging: String?,
     @SerializedName("alternatives") val alternatives: List<AlternativeProduct>?,
-    @SerializedName("verdict_color") val verdictColor: String?
+    @SerializedName("verdict_color") val verdictColor: String?,
+    @SerializedName("score_breakdown") val scoreBreakdown: ScoreBreakdown? = null,
+    /** Allergy/diet conflicts for the signed-in user; when non-empty the verdict is AVOID. */
+    @SerializedName("personal_alerts") val personalAlerts: List<String>? = null,
+    /** Only set on /scan/history rows: when this user last scanned the product (UTC, ISO-8601). */
+    @SerializedName("scanned_at") val scannedAt: String? = null
+)
+
+// ── Meal/weight sync (/api/tracking/sync); times are epoch milliseconds ──
+data class SyncMeal(
+    @SerializedName("client_id") val clientId: String,
+    @SerializedName("logged_at_ms") val loggedAtMs: Long,
+    @SerializedName("meal_slot") val mealSlot: String,
+    @SerializedName("food_id") val foodId: String,
+    @SerializedName("food_name") val foodName: String,
+    @SerializedName("quantity") val quantity: Float,
+    @SerializedName("unit") val unit: String,
+    @SerializedName("calories") val calories: Float,
+    @SerializedName("protein") val protein: Float,
+    @SerializedName("carbs") val carbs: Float,
+    @SerializedName("fat") val fat: Float,
+    @SerializedName("fiber") val fiber: Float,
+    @SerializedName("iron") val iron: Float,
+    @SerializedName("calcium") val calcium: Float,
+    @SerializedName("zinc") val zinc: Float,
+    @SerializedName("b12") val b12: Float,
+    @SerializedName("vitamin_d") val vitaminD: Float,
+    @SerializedName("folate") val folate: Float,
+    @SerializedName("is_estimated") val isEstimated: Boolean,
+    @SerializedName("deleted") val deleted: Boolean
+)
+
+data class SyncWeight(
+    @SerializedName("client_id") val clientId: String,
+    @SerializedName("measured_at_ms") val measuredAtMs: Long,
+    @SerializedName("weight_kg") val weightKg: Float,
+    @SerializedName("deleted") val deleted: Boolean
+)
+
+data class TrackingSyncRequest(
+    @SerializedName("since_ms") val sinceMs: Long?,
+    @SerializedName("meals") val meals: List<SyncMeal>,
+    @SerializedName("weights") val weights: List<SyncWeight>
+)
+
+data class TrackingSyncResponse(
+    @SerializedName("server_time_ms") val serverTimeMs: Long,
+    @SerializedName("meals") val meals: List<SyncMeal>?,
+    @SerializedName("weights") val weights: List<SyncWeight>?
 )
 
 data class ApiChatMessage(
@@ -138,6 +203,14 @@ interface ApiService {
 
     @POST("/api/chat")
     suspend fun chat(@Body request: ChatRequest): ChatResponse
+
+    /** Uploads changed meal/weight rows and returns everything changed on the server since sinceMs. */
+    @POST("/api/tracking/sync")
+    suspend fun syncTracking(@Body request: TrackingSyncRequest): TrackingSyncResponse
+
+    /** Permanently deletes the account and all server-side data (required by Google Play). */
+    @retrofit2.http.DELETE("/api/account")
+    suspend fun deleteAccount(): Map<String, String>
 }
 
 // 3. Create the Retrofit Singleton

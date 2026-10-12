@@ -40,6 +40,22 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.healthheatv2.data.ProductCacheEntity
 import com.example.healthheatv2.network.FoodResponse
 import com.example.healthheatv2.ui.components.UserProfileAvatar
+import com.example.healthheatv2.ui.components.TodayMealsCard
+import com.example.healthheatv2.ui.components.TodayProgressCard
+import com.example.healthheatv2.ui.components.NextStepCard
+import com.example.healthheatv2.ui.components.WeekCard
+import com.example.healthheatv2.ui.components.CompactScanCard
+import com.example.healthheatv2.ui.components.ReminderPromptCard
+import com.example.healthheatv2.ui.components.WeightCard
+import com.example.healthheatv2.notifications.EveningReminder
+import com.example.healthheatv2.services.MealCandidate
+import com.example.healthheatv2.services.NutritionEngine
+import com.example.healthheatv2.services.NutritionGap
+import com.example.healthheatv2.services.RecommendationEngine
+import com.example.healthheatv2.services.WeeklySummary
+import kotlinx.coroutines.launch
+import com.example.healthheatv2.ui.components.ScoreTier
+import com.example.healthheatv2.ui.components.color
 import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
 import com.example.healthheatv2.ui.viewmodel.ScannerViewModel
@@ -55,117 +71,216 @@ fun SearchHubScreen(
     viewModel: ScannerViewModel,
     authViewModel: AuthViewModel,
     themeViewModel: ThemeViewModel,
+    nutritionEngine: NutritionEngine,
+    localProfile: com.example.healthheatv2.data.UserProfile,
     onScanClick: () -> Unit,
     onManualEntryClick: () -> Unit,
     onViewAllHistoryClick: () -> Unit,
     onProductSelected: () -> Unit,
     onProfileClick: () -> Unit,
     onLogout: () -> Unit,
-    onAskAIClick: () -> Unit
+    onFixGap: (NutritionGap) -> Unit
 ) {
     val colors = LocalAppColors.current
     val history by viewModel.searchHistory
     val isDark by themeViewModel.isDark
-
-    val avgScore = if (history.isNotEmpty()) {
-        history.asSequence()
-            .take(10)
-            .mapNotNull { it.foodResponse.healthScore }
-            .average()
-            .toInt()
-    } else 0
-    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
-    val smashCount = history.count { (it.foodResponse.healthScore ?: 0) >= smashThreshold }
-    val passCount = history.count { (it.foodResponse.healthScore ?: 0) < smashThreshold }
     val userProfile by authViewModel.userProfile.collectAsState()
     val latestItem = history.firstOrNull()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var showReminderPrompt by remember {
+        mutableStateOf(!EveningReminder.promptAnswered(context) && !EveningReminder.isEnabled(context))
+    }
+
+    val calorieTarget = localProfile.dailyCalories ?: 2000f
+    val proteinTarget = localProfile.dailyProtein ?: 60f
+    val fibreTarget = localProfile.dailyFiber ?: 30f
+    val profileIncomplete = localProfile.missingFields.any { it in setOf("age", "height", "weight") }
+
+    // Today's meals drive everything on this screen and update live as food is logged or deleted.
+    val todayMeals by remember(nutritionEngine) { nutritionEngine.observeTodayMeals() }
+        .collectAsState(initial = emptyList())
+    val eatenCalories = todayMeals.sumOf { it.calories.toDouble() }.toFloat()
+    val eatenProtein = todayMeals.sumOf { it.protein.toDouble() }.toFloat()
+    val eatenFibre = todayMeals.sumOf { it.fiber.toDouble() }.toFloat()
+    val weights by remember(nutritionEngine) { nutritionEngine.db.weightLogDao().observeRecent(30) }
+        .collectAsState(initial = emptyList())
+
+    var nextGap by remember { mutableStateOf<NutritionGap?>(null) }
+    var ideas by remember { mutableStateOf<List<MealCandidate>>(emptyList()) }
+    var week by remember { mutableStateOf<WeeklySummary?>(null) }
+    val recommendationEngine = remember(localProfile) {
+        RecommendationEngine(nutritionEngine.db.nutritionDao(), localProfile)
+    }
+
+    LaunchedEffect(todayMeals, localProfile) {
+        // Only nutrients our food data measures reliably; vitamin D and B12 are rarely listed,
+        // so they would always look "missing".
+        val gap = nutritionEngine.calculateGaps().gaps
+            .filter { it.nutrient in setOf("Protein", "Fiber", "Iron", "Calcium") && it.percentageOfTarget < 0.9f }
+            .minByOrNull { it.percentageOfTarget }
+        nextGap = gap
+        ideas = if (gap != null && todayMeals.isNotEmpty()) {
+            val remaining = (calorieTarget - eatenCalories).coerceAtLeast(250f)
+            recommendationEngine.generateRecommendations(gap, remaining).take(2)
+        } else emptyList()
+        val since = WeeklySummary.startOfDay(System.currentTimeMillis()) - 6 * 86_400_000L
+        week = WeeklySummary.compute(nutritionEngine.getMealsSince(since), calorieTarget, proteinTarget, fibreTarget)
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
     ) {
-        // Removed AnimatedAmbientBackground to look more native/less AI-generated
-
-
-
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 120.dp)
         ) {
-        // ── Top Bar ──────────────────────────────
-        item {
-            HomeTopBar(
-                authViewModel = authViewModel,
-                isDark = isDark,
-                onThemeToggle = { themeViewModel.toggleTheme() },
-                onProfileClick = onProfileClick,
-                onLogout = onLogout
-            )
-        }
-
-        // ── Greeting + headline ───────────────────
-        item {
-            Spacer(Modifier.height(12.dp))
-            GreetingSection(userName = userProfile?.preferredName)
-        }
-
-        // ── Featured CTA Card ─────────────────────
-        item {
-            Spacer(Modifier.height(20.dp))
-            FeaturedScanCard(onScanClick = onScanClick, onManualClick = onManualEntryClick)
-        }
-
-        // ── Stats Panel ───────────────────────────
-        if (history.size >= 3) {
             item {
-                Spacer(Modifier.height(24.dp))
-                StatsPanel(
-                    totalScans = history.size,
-                    avgScore = avgScore,
-                    smashCount = smashCount,
-                    passCount = passCount
+                HomeTopBar(
+                    authViewModel = authViewModel,
+                    isDark = isDark,
+                    onThemeToggle = { themeViewModel.toggleTheme() },
+                    onProfileClick = onProfileClick,
+                    onLogout = onLogout
                 )
             }
-        }
 
-        // ── Latest scan card ─────────────────────
-        if (latestItem != null) {
             item {
-                Spacer(Modifier.height(28.dp))
-                SectionRow(
-                    title = "Last Scanned",
-                    action = if (history.size > 1) "View all →" else null,
-                    onActionClick = onViewAllHistoryClick
-                )
-                Spacer(Modifier.height(12.dp))
-                FeaturedProductCard(
-                    item = latestItem,
-                    onClick = {
-                        viewModel.loadFromHistory(latestItem.foodResponse)
-                        onProductSelected()
-                    }
+                Spacer(Modifier.height(4.dp))
+                GreetingSection(userName = userProfile?.preferredName)
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                TodayProgressCard(
+                    calories = eatenCalories,
+                    calorieTarget = calorieTarget,
+                    protein = eatenProtein,
+                    proteinTarget = proteinTarget,
+                    fibre = eatenFibre,
+                    fibreTarget = fibreTarget,
+                    itemsLogged = todayMeals.size,
+                    profileIncomplete = profileIncomplete,
+                    onCompleteProfile = onProfileClick,
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
-        }
 
-
-        // ── Health tips strip ─────────────────────
-        item {
-            Spacer(Modifier.height(28.dp))
-            SectionRow(title = "Health Tips", action = null, onActionClick = {})
-            Spacer(Modifier.height(12.dp))
-            HealthTipsStrip()
-        }
-
-        // ── Empty state ───────────────────────────
-        if (history.isEmpty()) {
             item {
-                Spacer(Modifier.height(28.dp))
-                EmptyHistoryState()
+                Spacer(Modifier.height(16.dp))
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    TodayMealsCard(
+                        meals = todayMeals,
+                        onDelete = { meal -> scope.launch { nutritionEngine.deleteMeal(meal.id) } },
+                        onAdd = { text -> describeLogResult(nutritionEngine.logFoodsFromText(text)) }
+                    )
+                }
+            }
+
+            if (showReminderPrompt && todayMeals.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    ReminderPromptCard(
+                        onDone = { showReminderPrompt = false },
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                }
+            }
+
+            val gap = nextGap
+            if (gap != null && todayMeals.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    NextStepCard(
+                        gap = gap,
+                        ideas = ideas,
+                        onMoreIdeas = { onFixGap(gap) },
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(20.dp))
+                CompactScanCard(
+                    onScan = onScanClick,
+                    onManual = onManualEntryClick,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+            }
+
+            val weekSummary = week
+            if (weekSummary != null && weekSummary.daysLogged > 0) {
+                item {
+                    Spacer(Modifier.height(12.dp))
+                    WeekCard(summary = weekSummary, calorieTarget = calorieTarget, modifier = Modifier.padding(horizontal = 20.dp))
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                WeightCard(
+                    entries = weights,
+                    goal = localProfile.primaryGoal,
+                    onLog = { kg ->
+                        scope.launch {
+                            nutritionEngine.db.weightLogDao().insert(
+                                com.example.healthheatv2.data.WeightLog(measuredAt = System.currentTimeMillis(), weightKg = kg)
+                            )
+                        }
+                        authViewModel.updateWeight(kg)
+                    },
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+            }
+
+            if (latestItem != null) {
+                item {
+                    Spacer(Modifier.height(24.dp))
+                    SectionRow(
+                        title = "Last scanned",
+                        action = if (history.size > 1) "View all →" else null,
+                        onActionClick = onViewAllHistoryClick
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    FeaturedProductCard(
+                        item = latestItem,
+                        onClick = {
+                            viewModel.loadFromHistory(latestItem.foodResponse)
+                            onProductSelected()
+                        }
+                    )
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "General nutrition information, not medical advice. Talk to a doctor or dietitian about medical conditions.",
+                    color = colors.textHint,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+                )
             }
         }
     }
+}
+
+/** One line for the log box: what was logged and what couldn't be matched. */
+fun describeLogResult(outcomes: List<NutritionEngine.LogOutcome>): String {
+    val logged = outcomes.filter { it !is NutritionEngine.LogOutcome.NotFound }
+    val missing = outcomes.filterIsInstance<NutritionEngine.LogOutcome.NotFound>()
+    return buildString {
+        if (logged.isNotEmpty()) append("Logged ${logged.joinToString(", ") { it.label }}.")
+        if (missing.isNotEmpty()) {
+            if (isNotEmpty()) append(" ")
+            append("Couldn't find ${missing.joinToString(", ") { it.label }}. Ask NutriBot to estimate it.")
+        }
+        if (isEmpty()) append("Nothing recognised. Try something like \"2 roti, 1 bowl dal\".")
     }
 }
 
@@ -253,126 +368,14 @@ private fun GreetingSection(userName: String? = null) {
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
-            text = buildAnnotatedString {
-                append("Know what\nyou're ")
-                withStyle(SpanStyle(color = colors.accentGreen, fontWeight = FontWeight.ExtraBold)) {
-                    append("eating.")
-                }
-            },
+            text = "Here's your day",
             color = colors.textPrimary,
-            fontSize = 32.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.ExtraBold,
-            lineHeight = 36.sp,
-            letterSpacing = (-1).sp
+            letterSpacing = (-0.5).sp
         )
-    }
-}
-
-// ─────────────────────────────────────────────────
-//  Featured Scan CTA Card
-// ─────────────────────────────────────────────────
-@Composable
-private fun FeaturedScanCard(onScanClick: () -> Unit, onManualClick: () -> Unit) {
-    val colors = LocalAppColors.current
-    
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Main Scan Button
-        var pressed by remember { mutableStateOf(false) }
-        val btnScale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(stiffness = Spring.StiffnessMediumLow))
-        LaunchedEffect(pressed) { if (pressed) { delay(150L); pressed = false } }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(110.dp)
-                .scale(btnScale)
-                .clip(RoundedCornerShape(32.dp))
-                .background(colors.accentGreen)
-                .clickable { pressed = true; onScanClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Icon Wrapper
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .background(Color.White.copy(0.25f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.QrCodeScanner, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
-                }
-                Column {
-                    Text("Scan Product", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
-                    Text("Instant AI Nutrition Analysis", color = Color.White.copy(0.85f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-        
-        Spacer(Modifier.height(16.dp))
-        
-        // Secondary action
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .clickable { onManualClick() }
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Filled.Keyboard, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(16.dp))
-            Text("Enter barcode manually", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────
-//  Stats Panel (Unified 2x2 Grid)
-// ─────────────────────────────────────────────────
-@Composable
-private fun StatsPanel(totalScans: Int, avgScore: Int, smashCount: Int, passCount: Int) {
-    val colors = LocalAppColors.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(colors.card)
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            StatItem(modifier = Modifier.weight(1f), title = "Total Scans", value = totalScans.toString(), icon = Icons.Filled.QrCode, color = colors.accentBlue)
-            Box(modifier = Modifier.width(1.dp).height(30.dp).background(colors.border))
-            StatItem(modifier = Modifier.weight(1f), title = "Avg Score", value = avgScore.toString(), icon = Icons.Filled.Analytics, color = colors.accentAmber)
-        }
-        androidx.compose.material3.HorizontalDivider(color = colors.border)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            StatItem(modifier = Modifier.weight(1f), title = "Healthy", value = smashCount.toString(), icon = Icons.Filled.ThumbUp, color = colors.accentGreen)
-            Box(modifier = Modifier.width(1.dp).height(30.dp).background(colors.border))
-            StatItem(modifier = Modifier.weight(1f), title = "Avoided", value = passCount.toString(), icon = Icons.Filled.ThumbDown, color = colors.accentRed)
-        }
-    }
-}
-
-@Composable
-private fun StatItem(modifier: Modifier, title: String, value: String, icon: ImageVector, color: Color) {
-    val colors = LocalAppColors.current
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(color.copy(0.12f)), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
-        }
-        Column {
-            Text(value, color = colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp)
-            Text(title, color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-        }
     }
 }
 
@@ -410,9 +413,8 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
     val colors = LocalAppColors.current
     val product = item.foodResponse
     val score = product.healthScore ?: 0
-    val smashThreshold by com.example.healthheatv2.data.RemoteConfigManager.smashThreshold.collectAsState()
-    val isSmash = score >= smashThreshold
-    val verdictColor = if (isSmash) colors.accentGreen else colors.accentRed
+    val tier = ScoreTier.of(product.verdict, product.healthScore)
+    val verdictColor = tier?.color() ?: colors.textSecondary
     val nutriScore = product.nutriScore?.uppercase() ?: "?"
     val nutriColor = nutriScoreColor(nutriScore, colors)
 
@@ -492,7 +494,7 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            if (isSmash) "SMASH ✓" else "PASS ✗",
+                            (tier?.label ?: "Not rated").uppercase(),
                             color = verdictColor,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -541,75 +543,6 @@ private fun FeaturedProductCard(item: ProductCacheEntity, onClick: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────
-//  Health Tips Strip
-// ─────────────────────────────────────────────────
-private val healthTips = listOf(
-    Triple("🥦", "Eat the Rainbow", "Varied coloured vegetables ensure diverse nutrient intake."),
-    Triple("💧", "Stay Hydrated", "Aim for 8 glasses of water daily for optimal metabolism."),
-    Triple("🔍", "Read Labels", "NOVA Group 1-2 products are minimally processed and healthiest."),
-    Triple("🚫", "Limit Additives", "Avoid products with many E-numbers or artificial flavours."),
-    Triple("⚡", "Energy Balance", "Match calorie intake to your activity level for healthy weight.")
-)
-
-@Composable
-private fun HealthTipsStrip() {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        itemsIndexed(healthTips) { _, (emoji, title, desc) ->
-            HealthTipCard(emoji = emoji, title = title, desc = desc)
-        }
-    }
-}
-
-@Composable
-private fun HealthTipCard(emoji: String, title: String, desc: String) {
-    val colors = LocalAppColors.current
-    Column(
-        modifier = Modifier
-            .width(170.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(colors.card)
-            .border(1.dp, colors.border, RoundedCornerShape(18.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(emoji, fontSize = 26.sp)
-        Text(title, color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Text(desc, color = colors.textSecondary, fontSize = 11.sp, lineHeight = 16.sp)
-    }
-}
-
-// ─────────────────────────────────────────────────
-//  Empty State
-// ─────────────────────────────────────────────────
-@Composable
-private fun EmptyHistoryState() {
-    val colors = LocalAppColors.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(colors.card)
-            .border(1.dp, colors.border, RoundedCornerShape(24.dp))
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text("🛒", fontSize = 48.sp)
-        Text("No scans yet", color = colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "Scan your first product to start tracking your nutrition intake.",
-            color = colors.textSecondary,
-            fontSize = 13.sp,
-            lineHeight = 19.sp
-        )
-    }
-}
-
-// ─────────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────────
 fun nutriScoreColor(score: String, colors: com.example.healthheatv2.ui.theme.AppColors): Color {
@@ -626,4 +559,4 @@ fun nutriScoreColor(score: String, colors: com.example.healthheatv2.ui.theme.App
 }
 
 private fun formatDate(timestamp: Long): String =
-    SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(timestamp))
+    if (timestamp <= 0L) "" else SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(timestamp))

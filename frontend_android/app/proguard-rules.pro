@@ -12,9 +12,8 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Preserve line numbers so Crashlytics stack traces are readable.
+-keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
@@ -36,3 +35,28 @@
 # PDF parsing (PdfBox Android)
 -keep class com.tom_roush.pdfbox.** { *; }
 -dontwarn com.tom_roush.pdfbox.**
+
+# ── Retrofit + Gson ─────────────────────────────────────────────────────────
+# Gson maps JSON by field name via reflection; R8 must not rename or strip these
+# models (they are also stored as JSON in Room via Converters).
+-keep class com.example.healthheatv2.network.** { *; }
+-keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*, AnnotationDefault
+-keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
+
+# Retrofit 2.9 predates its bundled R8 rules; without these, suspend functions in
+# ApiService fail in release builds with R8 full mode.
+-if interface * { @retrofit2.http.* <methods>; }
+-keep,allowobfuscation interface <1>
+-keep,allowobfuscation,allowshrinking interface retrofit2.Call
+-keep,allowobfuscation,allowshrinking class retrofit2.Response
+-keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+-dontwarn retrofit2.**
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn javax.annotation.**
+
+# ── MediaPipe LLM inference (on-device Gemma) ───────────────────────────────
+-keep class com.google.mediapipe.** { *; }
+-dontwarn com.google.mediapipe.**
