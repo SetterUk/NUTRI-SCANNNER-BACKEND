@@ -641,7 +641,9 @@ async def chat_with_nutritionist(
 
         response = await client.chat.completions.create(
             model="openai/gpt-oss-120b",
-            messages=raw_messages
+            messages=raw_messages,
+            # Chat answers are everyday food advice; the default (medium) reasoning made replies slow.
+            reasoning_effort="low",
         )
         content = response.choices[0].message.content or ""
         return {"response": content}
