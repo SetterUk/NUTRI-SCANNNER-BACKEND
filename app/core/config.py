@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     # No default: with a public fallback key anyone could forge a login token for any user.
     # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"
     SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    # A daily-habit app: weekly forced sign-ins were silently breaking saves (expired token -> 401).
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
     
     # Google Auth Configuration
     GOOGLE_CLIENT_ID: str = ""
