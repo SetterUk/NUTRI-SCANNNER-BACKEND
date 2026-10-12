@@ -326,7 +326,7 @@ ANALYSIS_FIELDS = [
     "safe_consumption_frequency", "health_score", "summary",
     "ingredients_analysis", "nutrition_analysis", "score_breakdown",
 ]
-GENERIC_ANALYSIS_VERSION = 3
+GENERIC_ANALYSIS_VERSION = 4  # 4: potato crisps scored as snacks, not whole foods
 
 
 def _profile_context(profile: Optional[UserProfile]) -> dict:
