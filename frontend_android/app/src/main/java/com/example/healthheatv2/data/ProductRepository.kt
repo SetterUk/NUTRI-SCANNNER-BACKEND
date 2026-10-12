@@ -69,12 +69,15 @@ class ProductRepository(
             if (RetrofitClient.authToken != null) {
                 // User is logged in, fetch from cloud!
                 val apiHistory = apiService.getHistory()
+                // Older servers send no scan time; fall back to when this phone scanned the product.
+                val localTimes = productDao.getSearchHistory().associate { it.barcode to it.scannedAt }
                 // Convert to ProductCacheEntity for UI compatibility
                 apiHistory.map {
+                    val barcode = it.barcode ?: ""
                     ProductCacheEntity(
-                        barcode = it.barcode ?: "",
+                        barcode = barcode,
                         foodResponse = it,
-                        scannedAt = parseServerTime(it.scannedAt) ?: 0L
+                        scannedAt = parseServerTime(it.scannedAt) ?: localTimes[barcode] ?: 0L
                     )
                 }
             } else {

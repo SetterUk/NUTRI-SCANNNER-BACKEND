@@ -41,8 +41,10 @@ import com.example.healthheatv2.ui.theme.LocalAppColors
 import com.example.healthheatv2.ui.viewmodel.AuthViewModel
 import com.example.healthheatv2.ui.viewmodel.ScannerViewModel
 import com.example.healthheatv2.ui.viewmodel.ThemeViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
@@ -417,9 +419,12 @@ private fun HistoryItemCard(
                     Text("N:$nutriScore", color = nutriColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
                 Text(
-                    text = formatDate(item.scannedAt),
+                    text = formatScanDate(item.scannedAt),
                     color = colors.textHint,
-                    fontSize = 10.sp
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -446,5 +451,21 @@ private fun HistoryItemCard(
     }
 }
 
-private fun formatDate(timestamp: Long): String =
-    if (timestamp <= 0L) "" else SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(timestamp))
+/** "Today, 3:40 pm", "Yesterday", "12 Oct", or "12 Oct 2025" for an earlier year; blank when unknown. */
+internal fun formatScanDate(
+    timestamp: Long,
+    zone: ZoneId = ZoneId.systemDefault(),
+    today: LocalDate = LocalDate.now(zone),
+    locale: Locale = Locale.getDefault()
+): String {
+    if (timestamp <= 0L) return ""
+    val scanned = Instant.ofEpochMilli(timestamp).atZone(zone)
+    val day = scanned.toLocalDate()
+    fun format(pattern: String) = scanned.format(DateTimeFormatter.ofPattern(pattern, locale))
+    return when {
+        day == today -> "Today, " + format("h:mm a").lowercase(locale)
+        day == today.minusDays(1) -> "Yesterday"
+        day.year == today.year -> format("d MMM")
+        else -> format("d MMM yyyy")
+    }
+}
