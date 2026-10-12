@@ -14,13 +14,12 @@ already in the repo are listed at the end for reference.
 
 ## 2. Backend (do before any tester installs the app)
 
-- [ ] **Set `SECRET_KEY` on Render.** The code no longer has a fallback key, so the server will
-      not start without it. Generate one with
-      `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
-      If the server was running on the old built-in key, every existing login token becomes
-      invalid and users must sign in again. That is expected.
-- [ ] **Render deploys `main`** (`render.yaml`). Merge `feature/trustworthy-daily-habit` into `main` only
-      after `SECRET_KEY` is set. Dependencies are pinned in `requirements.txt`: unpinned, Render pulled
+- [ ] **Set `SECRET_KEY` on Render** (recommended). Without it the server derives a key from
+      `DATABASE_URL` and logs a warning. The old public built-in key is gone. Generate one with
+      `python -c "import secrets; print(secrets.token_urlsafe(48))"` and add it under the service's
+      Environment tab. Changing the key (including setting it later) signs every user out once;
+      the app then asks them to sign in again.
+- [ ] **Render deploys `main`** (`render.yaml`). Dependencies are pinned in `requirements.txt`: unpinned, Render pulled
       SQLAlchemy 2.1, which no longer installs `greenlet`, and the server crashed on start.
 - [ ] **Deploy the backend** before shipping the new app. The app needs `/api/tracking/sync`
       (meal and weight sync), `DELETE /api/account`, login on `/api/chat`, and the new scan fields

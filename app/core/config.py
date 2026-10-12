@@ -1,5 +1,9 @@
+import hashlib
+import hmac
+import logging
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Nutri Scanner"
@@ -12,9 +16,10 @@ class Settings(BaseSettings):
         if not self.GROQ_API_KEYS:
             return []
         return [k.strip() for k in self.GROQ_API_KEYS.split(",") if k.strip()]
-    # No default: with a public fallback key anyone could forge a login token for any user.
-    # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"
-    SECRET_KEY: str
+    # Never a public default: anyone could forge a login token for any user. Set it on the host;
+    # generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    # When unset, a key is derived from DATABASE_URL (see below).
+    SECRET_KEY: str = ""
     # A daily-habit app: weekly forced sign-ins were silently breaking saves (expired token -> 401).
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 days
     
@@ -35,5 +40,16 @@ class Settings(BaseSettings):
         elif v.startswith("postgresql://"):
             v = v.replace("postgresql://", "postgresql+psycopg://", 1)
         return v
+
+    @model_validator(mode="after")
+    def derive_secret_key(self):
+        if not self.SECRET_KEY:
+            # DATABASE_URL is already a secret (whoever has it can read every account), so a key derived
+            # from it is no weaker, and it stays the same across restarts, so logins survive them.
+            self.SECRET_KEY = hmac.new(b"healthheat-jwt-v1", self.DATABASE_URL.encode(), hashlib.sha256).hexdigest()
+            logging.getLogger(__name__).warning(
+                "SECRET_KEY is not set; using a key derived from DATABASE_URL. Set SECRET_KEY to choose your own."
+            )
+        return self
 
 settings = Settings()
