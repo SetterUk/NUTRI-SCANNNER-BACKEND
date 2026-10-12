@@ -1,16 +1,21 @@
-fastapi
-uvicorn[standard]
-sqlmodel
-psycopg[binary]
-pydantic-settings
-httpx
-python-dotenv
-langgraph
-groq
-bcrypt
-python-jose[cryptography]
-python-multipart
-google-auth
-alembic
+# Pinned to the versions the test suite runs on. Unpinned installs broke a deploy: a newer
+# SQLAlchemy stopped installing greenlet, which the async engine needs, and the server could not start.
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+sqlmodel==0.0.14
+SQLAlchemy[asyncio]==2.0.45
+greenlet==3.3.0
+psycopg[binary]==3.3.2
+pydantic==2.12.5
+pydantic-settings==2.1.0
+httpx==0.28.1
+python-dotenv==1.0.0
+langgraph==1.0.10
+groq==1.0.0
+bcrypt==3.2.0
+python-jose[cryptography]==3.5.0
+python-multipart==0.0.29
+google-auth==2.47.0
+alembic==1.18.4
 sentry-sdk==2.66.1
-slowapi
+slowapi==0.1.9
