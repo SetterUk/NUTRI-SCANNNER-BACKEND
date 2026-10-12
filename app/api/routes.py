@@ -326,7 +326,7 @@ ANALYSIS_FIELDS = [
     "safe_consumption_frequency", "health_score", "summary",
     "ingredients_analysis", "nutrition_analysis", "score_breakdown",
 ]
-GENERIC_ANALYSIS_VERSION = 3
+GENERIC_ANALYSIS_VERSION = 4  # 4: potato crisps scored as snacks, not whole foods
 
 
 def _profile_context(profile: Optional[UserProfile]) -> dict:
@@ -641,7 +641,9 @@ async def chat_with_nutritionist(
 
         response = await client.chat.completions.create(
             model="openai/gpt-oss-120b",
-            messages=raw_messages
+            messages=raw_messages,
+            # Chat answers are everyday food advice; the default (medium) reasoning made replies slow.
+            reasoning_effort="low",
         )
         content = response.choices[0].message.content or ""
         return {"response": content}

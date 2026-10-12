@@ -119,3 +119,21 @@ def test_user_allergy_text_mapping():
     assert user_allergen_categories(["Tree nuts"]) == {"tree_nuts"}
     assert user_allergen_categories(["None"]) == set()
     assert user_allergen_categories(["Shellfish"]) == {"shellfish"}
+
+
+def test_potato_crisps_are_snacks_even_with_potatoes_food_group():
+    # Real OFF data for Lay's Classic Salted (8901491101837)
+    cats = ("en:plant-based-foods-and-beverages,en:plant-based-foods,en:snacks,en:cereals-and-potatoes,"
+            "en:salty-snacks,en:appetizers,en:chips-and-fries,en:potatoes-and-their-products,en:crisps,"
+            "en:salty-snacks-made-from-potato,en:potato-crisps")
+    assert detect_category_group(cats, ["en:cereals-and-potatoes", "en:potatoes"]) == "snacks"
+    assert detect_category_group("en:plant-based-foods,en:potatoes", ["en:cereals-and-potatoes", "en:potatoes"]) == "whole_foods"
+    assert detect_category_group("en:foods", ["en:cereals-and-potatoes", "en:potatoes"]) == "whole_foods"
+
+
+@pytest.mark.parametrize("categories", ["en:beverages,en:sodas", "en:groceries,en:sauces", "en:plant-based-foods,en:legumes"])
+def test_trans_fat_in_zero_tolerance_groups_scores_instead_of_crashing(categories):
+    nutrients = {**CHIWDA_NUTRIENTS, "trans-fat_100g": 0.1}
+    result = score(nutrients=nutrients, categories=categories)
+    assert 0 <= result.health_score <= 100
+    assert any("trans fat" in str(d).lower() for d in result.deductions)

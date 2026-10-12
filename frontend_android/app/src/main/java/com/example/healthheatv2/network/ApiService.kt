@@ -12,6 +12,9 @@ import okhttp3.OkHttpClient
 import retrofit2.http.PUT
 import retrofit2.http.Body
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 data class IngredientAnalysis(
     @SerializedName("name") val name: String?,
@@ -220,14 +223,24 @@ object RetrofitClient {
     
     var authToken: String? = null
 
+    /** Fires when the server rejects the saved login (e.g. it expired), so the app can ask the user to sign in again. */
+    private val _sessionExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val sessionExpired: SharedFlow<Unit> = _sessionExpired.asSharedFlow()
+
     private val authInterceptor = Interceptor { chain ->
         val original = chain.request()
         val requestBuilder = original.newBuilder()
-        authToken?.let { token ->
-            requestBuilder.header("Authorization", "Bearer $token")
+        val token = authToken
+        token?.let {
+            requestBuilder.header("Authorization", "Bearer $it")
         }
         val request = requestBuilder.build()
-        chain.proceed(request)
+        val response = chain.proceed(request)
+        // Only for the token still in use: a request sent just before a fresh sign-in must not sign the user out.
+        if (response.code == 401 && token != null && token == authToken && !original.url.encodedPath.startsWith("/api/auth/")) {
+            _sessionExpired.tryEmit(Unit)
+        }
+        response
     }
 
     private val client = OkHttpClient.Builder()

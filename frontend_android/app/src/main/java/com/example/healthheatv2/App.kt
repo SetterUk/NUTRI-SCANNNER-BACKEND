@@ -211,6 +211,18 @@ fun App(modifier: Modifier = Modifier) {
                 }
         }
 
+        // An expired login made every save fail silently (401). Send the user back to sign in instead.
+        LaunchedEffect(Unit) {
+            com.example.healthheatv2.network.RetrofitClient.sessionExpired.collect {
+                if (com.example.healthheatv2.network.RetrofitClient.authToken == null) return@collect
+                authViewModel.signOut()
+                authViewModel.setError("Your session expired. Please sign in again.")
+                navController.navigate(Screen.Auth.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
+
         // Simple rule:
         // - Not logged in → Auth screen
         // - Logged in + first time ever → Onboarding (once)

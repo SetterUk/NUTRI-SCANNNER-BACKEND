@@ -119,7 +119,6 @@ _FOOD_GROUP_MAP = {
     "en:legumes": "whole_foods",
     "en:nuts": "whole_foods",
     "en:dried-fruits": "whole_foods",
-    "en:potatoes": "whole_foods",
     "en:dressings-and-sauces": "condiments",
     "en:sweets": "confectionery",
     "en:chocolate-products": "confectionery",
@@ -140,6 +139,10 @@ _FOOD_GROUP_MAP = {
     "en:fruits-and-vegetables": "whole_foods",
     "en:cereals-and-potatoes": "grains_bakery",
 }
+
+# OFF food groups that also hold processed foods: "potatoes" includes crisps and fries, which scored
+# Lay's-type chips as a whole vegetable. The category tags decide; the group is only the fallback.
+_AMBIGUOUS_FOOD_GROUPS = {"en:potatoes": "whole_foods"}
 
 # Top-level OFF categories that say nothing about what the food is.
 _UNINFORMATIVE_TAGS = {
@@ -194,8 +197,13 @@ def detect_category_group(categories, food_groups: Optional[list] = None) -> str
     specific tag is checked first. Previously only the broadest tag was stored and keywords matched
     anywhere in the string, which put most Indian namkeen in "whole_foods" (salt limit 0.1 g).
     """
+    fallback = "general"
     for fg in reversed(food_groups or []):
-        group = _FOOD_GROUP_MAP.get(str(fg).strip().lower())
+        fg = str(fg).strip().lower()
+        if fg in _AMBIGUOUS_FOOD_GROUPS:
+            fallback = _AMBIGUOUS_FOOD_GROUPS[fg]
+            break
+        group = _FOOD_GROUP_MAP.get(fg)
         if group:
             return group
 
@@ -205,7 +213,7 @@ def detect_category_group(categories, food_groups: Optional[list] = None) -> str
         group = _group_for_tag(tag)
         if group:
             return group
-    return "general"
+    return fallback
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +376,9 @@ def _sat_fat_deduction(value: float, floor: float, is_protein_food: bool) -> flo
 def _trans_fat_deduction(value: float, floor: float) -> float:
     if value <= floor:
         return 0.0
-    ratio = value / floor
+    # Groups with a 0 g floor (any trans fat is too much) count against 0.1 g instead of dividing by zero,
+    # which crashed the whole scan for e.g. crisps or drinks listing 0.1 g.
+    ratio = value / max(floor, 0.1)
     if ratio >= 4.0:
         return -8.0
     # Smooth continuous linear interpolation between 1.0 (-2) and 4.0 (-8)

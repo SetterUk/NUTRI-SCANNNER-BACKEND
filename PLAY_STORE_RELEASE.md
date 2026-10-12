@@ -19,6 +19,9 @@ already in the repo are listed at the end for reference.
       `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
       If the server was running on the old built-in key, every existing login token becomes
       invalid and users must sign in again. That is expected.
+- [ ] **Render deploys `main`** (`render.yaml`). Merge `feature/trustworthy-daily-habit` into `main` only
+      after `SECRET_KEY` is set. Dependencies are pinned in `requirements.txt`: unpinned, Render pulled
+      SQLAlchemy 2.1, which no longer installs `greenlet`, and the server crashed on start.
 - [ ] **Deploy the backend** before shipping the new app. The app needs `/api/tracking/sync`
       (meal and weight sync), `DELETE /api/account`, login on `/api/chat`, and the new scan fields
       (verdict bands, score breakdown, alternatives, personal alerts). New tables and columns are
@@ -51,6 +54,10 @@ already in the repo are listed at the end for reference.
 5. Add the **SHA-1 of the Play app signing key** (Play Console → App integrity) to Firebase,
    otherwise Google sign-in breaks for Play-installed builds.
 6. Increase `versionCode` for every upload.
+7. **16 KB page size (Play rejects the upload otherwise).** `com.google.mediapipe:tasks-genai:0.10.20`
+   ships `libllm_inference_engine_jni.so` with 4 KB alignment (lint: `Aligned16KB`). 0.10.24 and 0.10.27
+   are 16 KB aligned (checked). Upgrade and retest on-device Gemma, or drop on-device Gemma. The newer
+   library is much larger (about 21 MB vs 4 MB per AAR).
 
 ## 4. Play Console requirements
 
