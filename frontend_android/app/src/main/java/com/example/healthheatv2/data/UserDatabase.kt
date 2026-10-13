@@ -52,6 +52,9 @@ abstract class UserDatabase : RoomDatabase() {
             "scanned_products", "meal_logs", "weight_logs", "user_profiles", "SavedChatMessage", "SavedDailyPlan"
         )
 
+        /** The personal tables that are someone's diary (synced to their account); see wipeOnSignIn. */
+        val DIARY_TABLES = listOf("meal_logs", "weight_logs")
+
         /**
          * v9 -> v10: meal_logs gains isEstimated + a date index; user_profiles gains missingFields.
          * Every schema change from here on needs a Migration: users' meal history and

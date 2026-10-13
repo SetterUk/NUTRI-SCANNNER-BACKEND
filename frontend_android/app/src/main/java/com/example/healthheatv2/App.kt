@@ -211,6 +211,15 @@ fun App(modifier: Modifier = Modifier) {
                 }
         }
 
+        // History belongs to the signed-in account: load it on sign-in, drop it on sign-out so the next
+        // person on this phone doesn't see it. (A non-Success state with a token is just a reset, not a sign-out.)
+        LaunchedEffect(authState) {
+            when {
+                authState is com.example.healthheatv2.ui.viewmodel.AuthState.Success -> scannerViewModel.refreshHistory()
+                RetrofitClient.authToken == null -> scannerViewModel.clearForSignOut()
+            }
+        }
+
         // An expired login made every save fail silently (401). Send the user back to sign in instead.
         LaunchedEffect(Unit) {
             com.example.healthheatv2.network.RetrofitClient.sessionExpired.collect {

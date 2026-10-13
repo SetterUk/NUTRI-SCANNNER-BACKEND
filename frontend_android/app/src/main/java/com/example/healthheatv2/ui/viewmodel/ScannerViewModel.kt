@@ -31,16 +31,23 @@ class ScannerViewModel(private val repository: ProductRepository) : ViewModel() 
     var selectedGap: com.example.healthheatv2.services.NutritionGap? = null
 
     private var lookupJob: Job? = null
+    private var historyJob: Job? = null
 
-    init {
-        refreshHistory()
-    }
-
-    // Fetch history from the database
+    /** History for whoever is signed in: their account's scans, or this phone's when offline. App.kt calls this on sign-in. */
     fun refreshHistory() {
-        viewModelScope.launch {
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
             _searchHistory.value = repository.getSearchHistory()
         }
+    }
+
+    /** On sign-out: this person's scans and last result must not stay on screen for whoever signs in next. */
+    fun clearForSignOut() {
+        historyJob?.cancel()
+        _searchHistory.value = emptyList()
+        resetState()
+        lastScannedBarcode = ""
+        selectedGap = null
     }
 
     fun lookupBarcode(barcode: String) {

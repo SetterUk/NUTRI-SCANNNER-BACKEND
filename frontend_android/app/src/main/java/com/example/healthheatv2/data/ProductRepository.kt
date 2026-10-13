@@ -83,6 +83,8 @@ class ProductRepository(
             } else {
                 productDao.getSearchHistory()
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("REPOSITORY", "Failed to fetch cloud history", e)
             productDao.getSearchHistory()
