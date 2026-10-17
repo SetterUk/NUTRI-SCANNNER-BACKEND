@@ -13,11 +13,12 @@ jobs:
     steps:
       - name: Ping Render API
         run: |
-          echo "Pinging Render backend to prevent cold start..."
-          response=$(curl -s -o /dev/null -w "%{http_code}" https://nutri-scanner-api.onrender.com/api/ping)
+          echo "Pinging Render backend to keep instance warm..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 --retry 2 https://nutri-scanner-api.onrender.com/health)
           echo "Response code: $response"
           if [ "$response" -eq 200 ]; then
-            echo "✅ Server is alive!"
+            echo "✅ Server is alive and responsive!"
           else
             echo "⚠️ Server returned status $response"
           fi
+
